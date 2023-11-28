@@ -1,0 +1,77 @@
+.\" copyright (c) 2005 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds document-title MOSSETPE
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOSSETPE
+- Configure the local cluster
+.Sh SYNOPSIS
+.Nm \&mossetpe
+.Pa [ -m mapfile ] [ -p our.ip.x.y ] ] [-A]
+.br
+.Nm \&mossetpe
+.Pa -[r|R]
+.br
+.Nm \&mossetpe
+.Pa -off [-A]
+.Sh DESCRIPTION
+.Pa Mossetpe
+modifies the MOSIX node configuration.
+.Pp
+The
+.Pa -m
+argument may be used to override the cluster's map file
+.Pa ( /etc/mosix/mosix.map -
+See
+.Pa mosix(7) ) .
+.Pp
+The
+.Pa -p
+argument may be used to override the local node's IP address
+(otherwise taken from
+.Pa /etc/mosix/mosip
+or by calling 
+.Pa ifconfig(8) .
+.Pp
+Normally,
+.Pa mossetpe
+waits until all guest processes that must not run here according to the
+new configuration are sent away and all processes originating from this
+home-node that run where they should not according to the new
+configuration, migrate elsewhere.   The
+.Pa -A
+argument causes
+.Pa mossetpe
+to return without waiting for this to happen.
+.br
+(but note that
+.Pa mossetpe
+could still delay if a previous call to
+.Pa mossetpe
+without the
+.Pa '-A'
+argument is still waiting for the above)
+.Pp
+.Pa mossetpe -r
+lists all nodes currently in the local cluster.
+.br
+.Pa mossetpe -R
+lists all nodes currently in the multi-cluster private cloud.
+.br
+.Pa mossetpe -off
+disables MOSIX.
+.Pp
+All users can read the MOSIX configuration, but only the Super-User can modify it.
+.Sh SEE ALSO
+.Xr mosix 7 .

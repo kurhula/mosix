@@ -1,0 +1,96 @@
+#!/bin/sh -
+#
+#	mosix $Id: mosix.init,v 1.1.1.1 2004/04/08 12:27:33 lior Exp $
+#
+
+# chkconfig: 2345 95 5
+# description: MOSIX is an extension of the operating system,
+#	       supporting scalable and transparent cluster computing.
+#
+# mosix		Script to stop/start MOSIX
+#
+# Author:       Amnon Shiloh, Amar Lior
+### BEGIN INIT INFO
+# Provides: MOSIX
+# Required-Start: $network
+# Should-Start:
+# Required-Stop:
+# Should-Stop:
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: MOSIX
+# Description: MOSIX
+### END INIT INFO
+#
+
+
+#Don't delete the following line. Needed for RedHat compatibility !!!
+#daemon mosix
+
+PATH=/sbin:/usr/sbin:/usr/local/sbin:/bin:/usr/bin:/usr/local/bin
+
+[ -x /etc/init.d/functions ] && . /etc/init.d/functions
+
+stop_mosix() {
+	echo -n Disconnecting from cluster...
+	mosctl shutdown
+	if [ -x /sbin/start-stop-daemon ]
+	then
+		start-stop-daemon --stop --signal 6 --pidfile /var/run/mosd.pid
+		RETVAL=$?
+	else
+		killproc mosd -ABRT
+		RETVAL=$?
+	fi
+        echo
+        [ $RETVAL -eq 0 -a -d /var/lock/subsys ] && rm -f /var/lock/subsys/mosix
+}
+
+start_mosix() {
+        [ -d /var/lock/subsys ] && touch /var/lock/subsys/mosix
+	rm -f /etc/mosix/var/.useroff /etc/mosix/var/isolate
+
+	if [ -x /sbin/start-stop-daemon ]
+	then
+		start-stop-daemon --start --pidfile /var/run/mosd.pid --exec `which mosd` -- 
+		RETVAL=$?
+	elif [ -x /sbin/startproc ]
+	then
+		startproc `which mosd`
+		RETVAL=$?
+	else
+		daemon mosd
+		RETVAL=$?
+	fi
+        [ $RETVAL -eq 0 -a -d /var/lock/subsys ] && touch /var/lock/subsys/mosix
+}
+
+# See how we were called.
+case "$1" in
+  start)
+	echo "Starting MOSIX..."
+	start_mosix ;;
+  stop)
+	echo "Stopping MOSIX..."
+	stop_mosix ;;
+  status)
+	mossetpe -r
+	echo
+	mosctl localstatus
+	RETVAL=$?
+	;;
+  restart|reload)
+	echo "Restarting MOSIX..."
+	stop_mosix
+	start_mosix ;;
+  *)
+	echo "Usage: mosix {start|stop|status|restart|reload}"
+	exit 1
+esac
+
+case $RETVAL in
+    *[1-9]*)
+          exit 1;;
+    *)   
+	  exit 0;;
+esac

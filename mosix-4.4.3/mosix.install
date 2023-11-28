@@ -1,0 +1,326 @@
+#!/bin/sh -
+#
+# Copyright (c) 2001 - 2015, Amnon BARAK, all rights reserved.
+# All rights reserved.
+# MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+#
+# THIS SOFTWARE IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+# WHATSOEVER. NO LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING
+# FROM THE USE OF THIS SOFTWARE WILL BE ACCEPTED.
+
+case `id -u` in [1-9]*)
+	echo You must be the Super-User to install MOSIX.
+	exit 1;;
+esac
+
+# Usage: ./mosix.install [-p[kumlican]] [-s] [-e|-E]
+#        [-l] [{ROOT}]
+# -p = parts of the installation (default="umlic"):
+#       u = user-mode
+#       m = manuals
+#       l = lzop
+#       i = init-script
+#	I = place init-script, but do not install it
+#       c = initial configuration
+#       a = Activate MOSIX afterwords
+#       n = Do not activate MOSIX (if no 'a' and no 'n' are given, ask user)
+# -e = cluster-root has no access to /etc (relevant only to (ROOT != "/"))
+# -E = cluster-root has access to /etc (relevant only to (ROOT != "/"))
+#       (with no "-e" and no "-E", the user is asked)
+# -l = display LICENSE
+# -s = silent (when possible)
+# ROOT = / for local host, or any other root-image directory starting with '/'
+#
+
+read_license() {
+	[ -r LICENSE ] || {
+		echo "LICENSE is missing!"
+		exit 1;
+	}
+	while :
+	do
+		less -M -e -PM"YOUR MOSIX LICENSE -- PLEASE READ CAREFULLY (%Pb\%):" LICENSE
+		echo
+		echo -n 'Please type "I accept" or "I reject": '
+		read i
+		i=`echo $i | sed 's/  */ /' | tr '[A-Z]' '[a-z]'`
+		case "$i" in "i accept") break ;;
+			"i reject") exit 1 ;;
+		esac
+	done
+	echo
+}
+
+parts=umlic
+silent=n
+etc_access=maybe
+
+for arg in $*
+do
+	case "$arg" in
+		-p*) parts=`expr "$arg" : '..\(.*\)'`
+			junk=`echo $parts | sed 's/[umlIican]//g'`
+			case "$junk" in ?*)
+				echo "Invalid part-argument(s): <$junk>" 1>&2
+				exit 1
+			esac
+			case "$parts" in *a*n*|*n*a*)
+				echo "Use either -pa or -pn, not both!" 1>&2
+				exit 1
+			esac ;;
+		-s) silent=y ;;
+		-e) etc_access=n ;;
+		-E) etc_access=y ;;
+		-l) read_license ;;
+		/*[\	\ \<\>\&\\\'\"\`]*) echo Improper ROOT 1>&2 ; exit 1 ;;
+		/*) ROOT="$arg" ;;
+		*) echo "Unknown argument ($arg)" 1>&2 ; exit 1 ;;
+	esac
+done
+
+umask 22
+case $silent in n)
+	echo Installing MOSIX:
+	echo =================
+	;;
+esac
+
+while :
+do
+	case `find . \! -user 0 -print -quit 2>/dev/null` in "") break ;; esac
+	echo
+	echo Some files in this directory do not belong to \"root\"
+	echo "(they must have been extracted under a non Super-User account):"
+	echo -n "this must be corrected before proceeding - correct it now [Y/n]? "
+	read yesno
+	case "$yesno" in [yY]*) chown -R 0 .
+		echo ;;
+		[nNqQ]*) exit 0 ;;
+	esac
+done
+
+while [ "$ROOT" = "" ]
+do
+	echo
+	echo If you are installing MOSIX for a set of nodes with
+	echo a common root, then type the common root directory -
+	echo -n "if you are installing only the local node, press <ENTER> :- "
+	read ROOT
+	case "$ROOT" in *[\	\ \<\>\&\\\'\"\`]*) ROOT= ; continue ;;
+		/*) [ -d $ROOT ] && break
+			echo "No such Directory!"
+			ROOT=
+			;;
+		"" | /) ROOT=/ ; break ;;
+		*) ROOT=`pwd`/$ROOT ;
+			[ -d $ROOT ] && break
+			echo "No such Directory ($ROOT)!"
+			ROOT=
+			;;
+	esac
+done
+case "$ROOT" in /) ROOT= ;; *) parts=n$parts ;; esac
+
+
+case $parts in *u*|*l*)
+
+if [ -w $ROOT/bin ]
+then
+	bdir=$ROOT/bin
+	nbdir1=$ROOT/usr/bin
+	nbdir2=$ROOT/usr/local/bin
+elif [ -w $ROOT/usr/bin ]
+then
+	bdir=$ROOT/usr/bin
+	nbdir1=$ROOT/bin
+	nbdir2=$ROOT/usr/local/bin
+elif [ -w $ROOT/usr/local/bin ]
+then
+	bdir=$ROOT/usr/local/bin
+	nbdir1=$ROOT/bin
+	nbdir2=$ROOT/usr/bin
+else
+	echo Sorry, No write access to /bin, /usr/bin or /usr/local/bin.
+	exit 1
+fi
+
+if [ -w $ROOT/sbin ]
+then
+	sdir=$ROOT/sbin
+	nsdir1=$ROOT/usr/sbin
+	nsdir2=$ROOT/usr/local/sbin
+elif [ -w $ROOT/usr/sbin ]
+then
+	sdir=$ROOT/usr/sbin
+	nsdir1=$ROOT/sbin
+	nsdir2=$ROOT/usr/local/sbin
+elif [ -w $ROOT/usr/local/sbin ]
+then
+	sdir=$ROOT/usr/local/sbin
+	nsdir1=$ROOT/sbin
+	nsdir2=$ROOT/usr/sbin
+else
+	echo Sorry, No write access to /sbin, /usr/sbin or /usr/local/sbin.
+	exit 1
+fi
+
+[ "$ROOT" = "" -a -x /etc/init.d/mosix ] && {
+	[ -x $bdir/mosctl ] && {
+		case `$bdir/mosctl 2>&1 | head -1 | awk '{print $5}'` in 4.[0-3].*)
+			killall $sdir/mosd
+			rm -f /etc/mosix/var/.procs
+		esac
+	}
+	/etc/init.d/mosix stop >/dev/null
+}
+;; esac
+
+case $parts in *m*)
+if [ -w $ROOT/usr/share/man ]
+then
+	mdir=$ROOT/usr/share/man
+elif [ -w $ROOT/usr/local/share/man ]
+then
+	mdir=$ROOT/usr/local/share/man
+elif [ -w $ROOT/usr/local/man ]
+then
+	mdir=$ROOT/usr/local/man
+else
+	until [ -d "$mdir" -a -w "$mdir" ]
+	do
+		echo No /usr/share/man, /usr/local/share/man or /usr/local/man:
+		case $ROOT in "")
+			echo -n "Where shall I place the MOSIX manuals? " ;;
+			*)
+			echo -n "Where shall I place the MOSIX manuals (relative to $ROOT)? " ;;
+		esac
+		read mdir
+		mdir=$ROOT/"$mdir"
+		case "$mdir" in */man) mdir=`expr $mdir : '\(.*\)/man$'` ;; esac
+	done
+fi
+;; esac
+
+case $parts in *u*)
+for f in mosbestnode mosmigrate mospipe mosmon mosctl mosenv mosps mostimeof \
+	moskillall mosrun mosnative mostestload
+do
+	case $f in testload) [ -x $f ] || continue ;; esac
+	[ -f $bdir/$f ] && mv $bdir/$f $bdir/$f.old 2>/dev/null
+	cp -p $f $bdir || exit 1
+	[ -f $nbdir1/$f ] && { rm -f $nbdir1/$f || echo WARNING: failed removing old file -- $nbdir1/$f; }
+	[ -f $nbdir2/$f ] && { rm -f $nbdir2/$f || echo WARNING: failed removing old file -- $nbdir2/$f; }
+done
+chmod u+s $bdir/mosbestnode $bdir/mosrun $bdir/mosps $bdir/mostimeof || exit 1
+chmod u+s $bdir/moskillall $bdir/mosmigrate || exit 1
+for f in mosixd mosd mospostald mosremoted mossetpe mos_checkconf mos_autoconf mos_in_job mosconf*
+do
+	[ -f $sdir/$f ] && mv $sdir/$f $sdir/$f.old 2>/dev/null
+	cp -p $f $sdir || exit 1
+	[ -f $nsdir1/$f ] && { rm -f $nsdir1/$f || echo WARNING: failed removing old file -- $nsdir1/$f; }
+	[ -f $nsdir2/$f ] && { rm -f $nsdir2/$f || echo WARNING: failed removing old file -- $nsdir2/$f; }
+done
+;; esac
+
+case $parts in *l*)
+[ -f /usr/bin/lzop ] || cp -p other/lzop /usr/bin/lzop 2>/dev/null
+;; esac
+
+case $parts in *m*)
+cp -Ra man/. $mdir/. || exit 1
+;; esac
+
+case $parts in *i*)
+cp mosix $ROOT/etc/init.d
+
+if [ -x /usr/lib/lsb/install_initd ]
+then
+	/usr/lib/lsb/install_initd -f $ROOT/etc/init.d/mosix > /dev/null
+elif [ -x /sbin/insserv ]
+then
+	/sbin/insserv -f -p $ROOT/etc/init.d mosix
+else
+while :
+do
+	echo -n "In which run-level(s) should MOSIX run (0=none) [2345] ?- "
+	read levels
+	case "$levels" in "") levels=2345 ; break ;;
+		0) break ;;
+	esac
+	z=`echo "$levels" | sed 's/[2345]//g'`
+	case "$z" in ?*) echo Please use only a combination of the digits 2-5
+		echo "(or 0 if you do not wish to activate MOSIX automatically). " ;;
+		*) break ;;
+	esac
+done
+
+if [ -d /etc/init.d/rc2.d -a \! -d /etc/rc2.d ]
+then
+	indir=/init.d
+	targ=..
+else
+	indir=
+	targ=../init.d
+fi
+for lev in 2 3 4 5
+do
+	case $levels in *$lev*)
+		ln -fs $targ/mosix $ROOT/etc$indir/rc$lev.d/S95mosix
+		rm -f $ROOT/etc$indir/rc$lev.d/K05mosix ;;
+	*)
+		ln -fs $targ/mosix $ROOT/etc$indir/rc$lev.d/K05mosix
+		rm -f $ROOT/etc$indir/rc$lev.d/S05mosix ;;
+	esac
+done
+for lev in 0 1 6
+do
+	ln -fs $targ/mosix $ROOT/etc$indir/rc$lev.d/K05mosix
+done
+fi
+;; *I*) cp mosix $ROOT/etc/init.d ;;
+esac
+
+mkdir -p $ROOT/etc/mosix
+[ -d $ROOT/etc/mosix/var ] || {
+	case "$ROOT"-$etc_access in -*|*-y) mkdir -p /etc/mosix/var ;;
+		*-n) mkdir -p $ROOT/var/mosix
+		     ln -s ../../var/mosix $ROOT/etc/mosix/var ;;
+		*) echo
+		   echo Sometimes clusters are set up in such a way that even the Super-User
+		   echo "on the cluster-nodes has no write access to the node's /etc directory"
+		   echo "(but even then, it is an expected common practice that each node should have"
+		   echo "access at least to its /var partition). Please say 'no' ONLY in this situation:"
+		   echo -n 'Will user "root" have access to /etc on the target node(s) [Y/n]? '
+		   read yesno
+		   case "$yesno" in [nN]*)
+				mkdir -p $ROOT/var/mosix
+				ln -s ../../var/mosix $ROOT/etc/mosix/var ;;
+			*) mkdir -p $ROOT/etc/mosix/var ;;
+		   esac ;;
+	esac
+}
+
+case $silent in n)
+echo
+echo Congratulations on successfully installing MOSIX.
+echo
+;; esac
+
+case $parts in *c*)
+[ -d $ROOT/etc/mosix/partners ] || {
+	case $ROOT in /*) ./mosconf $ROOT ;; *) ./mosconf 0 ;; esac
+}
+echo
+;; esac
+
+case $parts in *n*) : ;; *)
+	echo -n "Activate MOSIX now [Y/n]? "
+	read yesno
+	case "$yesno" in [nNqQ]*) : ;; *)
+		case $silent in y) /etc/init.d/mosix start > /dev/null 2>&1 ;;
+			n) /etc/init.d/mosix start ;;
+		esac ;;
+	esac ;;
+esac
+
+exit 0

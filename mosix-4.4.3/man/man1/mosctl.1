@@ -1,0 +1,229 @@
+.\" copyright (c) 2005 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds document-title MOSCTL
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOSCTL
+- Miscellaneous MOSIX functions
+.Sh SYNOPSIS
+.Nm \&mosctl stay
+.Nm \&mosctl nostay
+.Nm \&mosctl lstay
+.Nm \&mosctl nolstay
+.Nm \&mosctl block
+.Nm \&mosctl noblock
+.Nm \&mosctl expel
+.Nm \&mosctl bring
+.Nm \&mosctl shutdown
+.Nm \&mosctl isolate
+.Nm \&mosctl rejoin [ {maxguests} ]
+.Nm \&mosctl maxguests [ {maxguests} ]
+.Nm \&mosctl openmulti [ {maxguests} ]
+.Nm \&mosctl closemulti
+.Nm \&mosctl whois [ {node_number}|IP-address|hostname ]
+.Nm \&mosctl status [ {node_number}|IP-address|hostname ]
+.Nm \&mosctl localstatus
+.Nm \&mosctl rstatus [ {node_number}|IP-address|hostname ]
+.Sh DESCRIPTION
+Most 
+.Pa Mosctl
+functions are for MOSIX administration and are available only to the
+Super-User.  The exceptions are the
+.Pa whois ,
+.Pa status
+and
+.Pa rstatus
+functions which provide information to all users.
+.Pp
+.Pa mosctl stay
+prevents processes from migrating away automatically:
+.Pa mosctl nostay
+cancels this state.
+.Pp
+.Pa mosctl lstay
+prevents local processes from migrating away automatically,
+but still allows guest processes to leave:
+.Pa mosctl nolstay
+cancels this state.
+.Pp
+.Pa mosctl block
+prevents guest processes from moving in:
+.Pa mosctl noblock
+cancels this state.
+.Pp
+.Pa mosctl expel
+expels all guest processes. It does not return until all guest processes
+are moved away (it can be interrupted, in which case there is no guarantee
+that all guest processes were expelled).
+.Pp
+.Pa mosctl bring
+brings back all processes whose home-node is here.  It does not return until
+all these processes arrive back
+(it can be interrupted, in which case there is no guarantee that all the
+processes arrived back).
+.Pp
+.Pa mosctl shutdown
+shuts down MOSIX.  All guest processes are expelled and all processes whose
+home-node is here are brought back, then the MOSIX configuration is turned off.
+.Pp
+.Pa mosctl isolate
+disconnects the cluster from the multi-cluster private cloud, bringing back
+all migrated processes whose home-node is in the disconnecting cluster and
+sending away all guest processes from other clusters.  To actually disconnect
+a cluster, this command must be issued on all the nodes of that cluster.
+.Pp
+.Pa mosctl rejoin
+cancels the effect of
+.Pa mosctl isolate :
+an optional argument sets the number of guest processes that are allowed to
+move to this node or run here from outside the local cluster.
+When this argument
+is missing, no guest processes from outside the cluster will be accepted.
+.Pp
+.Pa mosctl maxguests
+prints the maximum number of guests that are
+allowed to migrate to this node from other clusters.
+.Pa mosctl maxguests arg,
+with a numeric argument
+.Pa arg,
+sets that maximum.
+.Pp
+.Pa mosctl openmulti
+sets the maximum number of guest processes from outside the local cluster
+to:
+.in +2
+.Bl -enum -compact -width a
+.It
+If an argument is provided - that argument.
+.It
+Otherwise, if a positive maximum number of guest processes is already
+defined in
+.Pa /etc/mosix/maxguests ,
+then it is not changed.
+.It
+Otherwise, if a former call was made to
+.Pa mosctl closemulti -
+the maximum number of guest processes before that call.
+.It
+Otherwise, 8 times the number of processors.
+.El
+.in -2
+.Pp
+.Pa mosctl closemulti
+sets that maximum to 0 - preventing processes from other clusters to
+run on this node.
+.Pp
+.Pa mosctl whois ,
+depending on its argument, converts host-names and IP addresses to
+node numbers or vice-versa.
+.Pp
+.Pa mosctl status
+outputs useful and user-friendly information about a given node.
+When the last argument is omitted, the information is about the local node.
+.Pp
+.Pa mosctl localstatus
+is like
+.Pa status ,
+but adds more information that is only available locally.
+.Pp
+.Pa mosctl rstatus
+output raw information about a given node.  When the last argument is
+omitted, the information is about the local node.
+This information consists of 10 integers:
+.sp
+.Bl -enum -compact -width a
+.It
+.Pa status: 
+a bit-map, where bits have the following meaning:
+.sp
+.Bl -tag -compact -width abcd
+.It 1
+The node is currently part of our MOSIX configuration.
+.It 2
+Information is available about the node.
+.It 4
+The node is in "stay" mode (see above).
+.It 8
+The node is in "lstay" mode (see above).
+.It 16
+The node is in "block" mode (see above).
+.It 32
+The node may accept processes from here.
+.br
+Reasons for this bit to NOT be set include:
+.Bl -tag -compact -width a
+.It *
+We do not appear in that node's map.
+.It *
+That node is configured to block migration of processes from us.
+.It *
+Our configuration does not allow sending processes to that node.
+.It *
+That node is currently running higher-priority MOSIX processes.
+.It *
+That node is currently running MOSIX processes with the same priority
+as our processes, but is not in our cluster and already reached its maximum
+number of allowed guest-processes.
+.It *
+That node is blocked.
+.El
+.It 512
+The information is not too old.
+.It 1024
+The node prefers processes from here over its current guests.
+.El
+.sp
+.It
+.Pa load:
+a value of 100 represents a standard load unit.
+.It
+.Pa availability:
+The lower the value the more available that node is:
+in the extremes, 65535 means that the node is available to all while 0 means
+that generally it is only available for processes from its own cluster.
+.It
+.Pa speed:
+a value of 10000 represents a standard processor (Pentium-IV at 3GHz).
+.It
+.Pa ncpus:
+number of processors.
+.It
+.Pa frozen:
+number of frozen processes.
+.It
+.Pa available memory:
+in pages.
+.It
+.Pa total memory:
+in pages.
+.It
+.Pa free swap-space:
+in 0.1GB units.
+.It
+.Pa total seap-space
+in 0.1GB units.
+.It
+.Pa privileged memory:
+in pages - pages that are currently taken by less privileged guests,
+but could be used by clusters of higher privilege (including this node
+when "1024" is included in the
+.Pa status
+above).
+.It
+.Pa number of processes:
+only MOSIX processes are counted and
+this count could differ from the load because it includes inactive processes.
+.El
+.Sh SEE ALSO
+.Xr mosix 7 .

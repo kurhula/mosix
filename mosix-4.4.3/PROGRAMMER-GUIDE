@@ -1,0 +1,95 @@
+                        MOSIX PROGRAMMER'S GUIDE
+                        ========================
+                              January 2016
+
+  This guide views MOSIX from the perspective of programmers.
+
+  1. What types of programs are suitable for MOSIX?
+  2. What is not supported under MOSIX?
+  3. How to optimise programs for MOSIX?
+  4. Controlling the behaviour of MOSIX from within programs
+
+  1. What types of programs are suitable for MOSIX?
+  =================================================
+  MOSIX is suitable for computational programs that run on the x86_64
+  architecture, where computation is relatively high compared with the
+  volume of Input/Output and Inter-Process-Communication.  Such
+  programs can benefit from process-migration.
+
+  2. What is not supported under MOSIX?
+  =====================================
+  All forms of shared memory, except "vfork", are not supported under
+  MOSIX, including threads.
+
+  Also, several system-calls that are primarily designed to support
+  threads and others that are primarily designed for system-utilities,
+  are not supported.  The full list of unsupported system-calls can be
+  found in the "LIMITATIONS" section of the "mosrun" manual-page.
+
+  While the "vfork()" system-call is supported, it forces both the
+  parent and child processes to migrate back to their home-node and
+  process-migration is disabled for them until the son either calls
+  "execve()" or exits.
+
+  3. How to optimise programs for MOSIX?
+  ======================================
+  Due to the need for transparency, where your program works in
+  exactly the same manner regardless where it runs, all system calls
+  are monitored: this means that system-calls are rather expensive in
+  terms of performance.
+
+  A few system-calls are not a problem on today's modern computers,
+  but if their number increase as they run within loops, their cost
+  might become prohibitive.
+
+  So try to reduce the number of system-calls.  You could for example
+  read/write more data in one block instead of reading it byte-by-
+  byte, or you could use "pread/pwrite" instead of lseek+read/write.
+
+  A common practice is to use "gettimeofday()" within a loop, often in
+  order to check how efficient your program is - try to minimise this
+  because it is expensive and would make your program inefficient
+  indeed: if you call "gettimeofday()" because you need to do or check
+  something else once in a while, it is better to use "setitimer()"
+  instead.
+
+  Note that system-call monitoring occurs even when your program runs
+  on its home-node.
+
+  If your program spawns a child-process that runs an executable that
+  does much I/O or many system-calls, consider modifying your
+  "execve()" call so the child runs under "mosnative":
+  "mosnative {program} [args]..." takes the executable away from being
+  under MOSIX control.  On the one hand, the child will have to run on
+  its home-node and not be migratable, but on the other hand it will
+  not incur a performance-penalty on its I/O and system-calls.
+
+  4. Controlling the behaviour of MOSIX from within programs
+  ==========================================================
+  Some MOSIX behaviour can be controlled from within your program.
+  Your program can interact with MOSIX by loading the "open()" system
+  call, "opening" files of the form "/proc/self/{function}" (which do
+  not exist otherwise, so all such calls will fail with errno set to
+  ENOENT if your program does not run on MOSIX).
+
+  Here is what you can do:
+
+  * Find where your program is currently running.
+  * Find how many times your program has migrated so far.
+  * Find whether or not your program runs in your home-cluster.
+  * Migrate your program to another node of your choice.
+  * Perform a checkpoint.
+  * Control automatic-checkpoint parameters.
+  * Request to receive a signal when your program migrates.
+  * Inform MOSIX how much memory your program requires.
+  * Control load-balancing parameters.
+
+  You can also control:
+
+  * Whether your program may automatically migrate or not.
+  * Whether your program may be automatically frozen or not.
+  * Whether MOSIX should ignore unsupported system-calls.
+  * Whether MOSIX should report unsupported system-calls to stderr.
+
+  The details on using those functions is found in the "INTERFACE FOR
+  PROGRAMS" section of the "mosix" manual-page.

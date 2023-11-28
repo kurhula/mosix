@@ -1,0 +1,181 @@
+.\" copyright (c) 2005 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds document-title MOSPIPE
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOSPIPE
+- Run pipelined jobs efficiently using Direct Communication
+.Sh SYNOPSIS
+.Nm \&mospipe [mosrun-options1] {program1+args1} [-e] [mosrun-options2]
+.Pa {program2+args2} [[-e] [mosrun-options3] {program3+args3}]...
+.sp
+.Pa Mosrun options:
+.in +6
+.Pa [-h|-a.b.c.d|-r{hostname}|-{nodenumber}] [-l|-L] [-F] [-g|-G] [-m{mb}]
+.in -6
+.Sh DESCRIPTION
+.Pa Mospipe
+runs two or more pipelined programs just as a shell would run:
+.sp
+.in +4
+.Pa program1 [args1] | program2 [args2] [ | program3 [args3] ] ...
+.in -4
+.sp
+except that instead of pipes, the connection between the programs uses
+the MOSIX feature of
+.Pa direct_communication(7)
+that makes the transfer of data between migrated programs much more efficient.
+.Pp
+Each program argument includes the program's space-separated arguments:
+if you want to have a space (or tab, carriage-return or end-of-line) as
+part of a program-name or argument, use the backslash(\\) character to quote it
+('\\' can quote any character, including itself).
+.Pp
+Each program may optionally be preceded by certain
+.Pa mosrun(1)
+arguments that control
+(see
+.Pa mosrun(1)
+for further details):
+.sp
+.in +4
+.Bl -tag -compact -width abcdef
+.It Pa -h|-a.b.c.d|-r{hostname}|-{nodenumber}
+On which node should the program start.
+.It Pa -F
+Whether to run even when the designated node is down.
+.It Pa -l|-L
+Allow/disallow automatic migration.
+.It Pa -G|-g
+Allow/disallow automatic freezing.
+.It Pa -m{mb}
+The amount of memory that the program requires.
+.El
+.in -4
+.Pp
+The
+.Pa -e
+(or
+.Pa -E )
+argument between programs indicates that as well as the standard-output,
+the standard-error of the preceding program should also be sent to the
+standard-input of the following program.
+.Pp
+If
+.Pa mospipe
+is not already running under
+.Pa mosrun(1) ,
+then in order to enable direct communication it places itself under
+.Pa mosrun(1) .
+In that case it also turns on the
+.Pa -e
+flag of
+.Pa mosrun(1)
+for the programs it runs.
+.Sh APPLICABILITY
+.Pa Mospipe
+is intended to connect simple utilities and applications that read from
+their standard-input and write to their standard-output (and standard-error).
+.Pp
+.Pa mospipe
+sets the MOSIX
+.Pa direct_communication(7)
+to resemble pipes, so applications that expect to have pipes or sockets
+as their standard-input/output/error and specifically applications that
+only use the
+.Pa stdio(3)
+library to access those, should rarely have a problem running under
+.Pa mospipe .
+.Pp
+However,
+.Pa direct_communication(7)
+and pipes are not exactly the same, so sophisticated applications that
+attempt to perform complex operations on file-descriptors 0, 1 and 2
+(such as
+.Pa lseek(2) , readv(2) , writev(2) , fcntl(2) , ioctl(2) , select(2) ,
+.Pa poll(2) , dup(2) , dup2(2) , fstat(2),
+etc.) are likely to fail.  This regrettably includes the
+.Pa tcsh(1)
+shell.
+.Pp
+The following anomalies should also be noted:
+.Bl -tag -compact -width a
+.It *
+.Pa mosrun(1)
+and
+.Pa mosnative
+(See
+.Pa mosrun(1) )
+cannot run under
+.Pa mospipe :
+attempts to run them will produce a "Too many open files" error.
+.It *
+An attempt to write 0 bytes to the standard-output/error will create an
+End-Of-File condition for the next program.
+.It *
+Input cannot be read by child-processes of the receiver (open
+direct-communication connections are not inheritable).
+.It *
+.Pa Direct_Communication(7)
+should not be used by the applications (or at least extreme caution must
+be used) since
+.Pa direct communication
+is already being used by
+.Pa mospipe
+to emulate the pipe(s).
+.El
+.Sh EXAMPLES
+.Pa mospipe \&"echo hello world\&" wc
+.in +6
+is like the shell-command:
+.in -6
+.Pa echo hello world
+|
+.Pa wc
+.in +6
+and will produce:
+.in -6
+      1       2      12
+.sp
+.Pp
+.Pa mospipe \&"ls /no-such-file\&" -e \&"tr [a-z\e \& ] [A-Z+]\&"
+.in +6
+is like the shell-command:
+.in -6
+.Pa ls /no-such-file |& tr '[a-z\& ]' '[A-Z+]'
+.in +6
+and will produce:
+.br
+LS:+/NO-SUCH-FILE:+NO+SUCH+FILE+OR+DIRECTORY
+.in -6
+.sp
+.Pp
+.Pa b=`mosbestnode`
+.br
+.Pa mospipe \&"echo hello world\&" -$b -L bzip2 -$b -L bzcat \&"tr [a-z] [A-Z]\&"
+.in +6
+is like the shell-command:
+.in -6
+.Pa echo hello world | bzip | bzcat | tr '[a-z]' '[A-Z]'
+.sp
+.in +6
+It will cause both compression (bzip) and decompression (lzop -d) to run
+and stay on the same and best node for maximum efficiency, and will produce:
+.sp
+HELLO WORLD
+.in -6
+.Sh SEE ALSO
+.Xr direct_communication 7 ,
+.Xr mosrun 1 ,
+.Xr mosix 7 .

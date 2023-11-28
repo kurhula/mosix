@@ -1,0 +1,56 @@
+.\" copyright (c) 2005 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds document-title MOSKILLALL
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOSKILLALL
+- Kill or signal all your MOSIX processes
+.Sh SYNOPSIS
+.Nm \&moskillall
+.Pa [ -{signum} | -{symbolic_signal} ]
+.sp
+Symbolic signals:
+.Pp
+.Pa HUP INT QUIT ILL TRAP ABRT BUS FPE KILL USR1 SEGV USR2
+.Pa PIPE ALRM TERM STKFLT CHLD CONT STOP TSTP TTIN TTOU URG
+.Pa XCPU XFSZ VTALRM PROF WINCH POLL PWR SYS
+.Sh DESCRIPTION
+.Pa Moskillall
+kills or sends a signal to all the user's MOSIX processes, or if called
+by the Super-User, to all MOSIX processes of all users.
+.Pp
+The default signal is SIGTERM, unless a numeric
+.Pa -{signum}
+or symbolic
+.Pa -{symbolic_signal}
+argument specifies a different signal.
+However, as MOSIX processes should not receive the SIGSTOP signal,
+SIGSTOP signals are converted to SIGTSTP.
+.Pp
+Note that
+.Pa moskillall
+cannot provide an absolute guarantee that all processes will receive
+the signal, as a rare race condition is possible where one or
+more processes are forking at the exact time of running it.
+.Pp
+.Sh DEFINITION OF MOSIX PROCESSES
+MOSIX processes are processes that were started by the
+.Pa mosrun(1)
+utility on the current node, excluding those processes that invoked the
+.Pa mosnative
+utility.
+.Sh SEE ALSO
+.Xr mosps 1 ,
+.Xr mosrun 1 ,
+.Xr mosix 7 .

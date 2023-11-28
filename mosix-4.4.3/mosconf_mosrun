@@ -1,0 +1,110 @@
+#!/bin/sh -
+#
+# Copyright (c) 2011 - 2015, Amnon BARAK, all rights reserved.
+# All rights reserved.
+# MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+#
+# THIS SOFTWARE IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+# WHATSOEVER. NO LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING
+# FROM THE USE OF THIS SOFTWARE WILL BE ACCEPTED.
+
+PATH=/sbin:/usr/sbin:/usr/local/sbin:/bin:/usr/bin:/usr/local/bin
+
+all=`cat $ROOT/etc/mosix/mosrun_admin 2>/dev/null`
+case "$all" in *Q*) Q=Q ;; *q*) Q=q ;; esac
+case "$all" in *B*) B=B ;; *q*) B=b ;; esac
+case "$all" in *w*) W=w ;; *e*) W=e ;; esac
+case "$all" in *M*) M=M ;; esac
+
+clear
+echo "Controlling the parameters of 'mosrun':"
+echo =======================================
+echo "This is where you can make certain parameters of 'mosrun' the default"
+echo "or even enforce some of them without permitting the user to override them."
+echo
+case $B in
+	"") echo "* Selecting the best node to start on is currently not enforced."
+	    defb=None/default/enforce ;;
+	b) echo "* Selecting the best node to start on is currently the default,"
+	   echo "  but is not enforced."
+	   defb=none/Default/enforce ;;
+	B) echo "* Selecting the best node to start on is currently enforced."
+	   defb=none/default/Enforce ;;
+esac
+case $W in
+	"") echo "* Programs that attempt an unsupported system-call are currently killed"
+	    echo "  (unless the user specifies the '-e' or '-w' flags)."
+	    defw=Kill/proceed/warn ;;
+	e) echo "* Programs that attempt an unsupported system-call are currently"
+	   echo "  allowed to proceed silently by default, as per the '-e' parameter."
+	   defw=kill/Proceed/warn ;;
+	w) echo "* Programs that attempt an unsupported system-call are currently" 
+	   echo "  allowed to proceed with a warning to the standard-error by default,"
+	   echo "  as per the '-w' parameter."
+	   defw=kill/proceed/Warn ;;
+esac
+case $M in
+	"") echo "* Memory-specification is currently not enforced."
+	    defm=No/yes ;;
+	M) echo "* Memory-specification is currently enforced."
+	    defm=no/Yes ;;
+esac
+while :
+do
+	echo
+	echo Your options regarding selecting the best node to start on are to:
+	echo "1. Not interfere with the user's choice."
+	echo "2. Make selecting the best node the default, but not enforce it."
+	echo "3. Enforce selecting the best node on all users."
+	echo
+	echo -n "Your choice [$defb] :- "
+	read x
+	case "$x" in "") break ;;
+		1|[nN]*) B= ; break ;;
+		2|[dD]*) B=b ; break ;;
+		3|[eEfF]*) B=B ; break ;;
+		[qQ]*) exit 0 ;;
+		*) echo "Invalid option!" ;;
+	esac
+done
+while :
+do
+	echo
+	echo Your options regarding the handling of unsupported system-calls are to:
+	echo "1. Not interfere with the user's choice (by default, kill the process)."
+	echo "2. Make silent recovery-attempts the default."
+	echo "3. Make recovery-attempts the default, with warnings to standard-error."
+	echo
+	echo -n "Your choice [$defw] :- "
+	read x
+	case "$x" in "") break ;;
+		1|[kK]*) W= ; break ;;
+		2|[pP]*) W=e ; break ;;
+		3|[wW]*) W=w ; break ;;
+		[qQ]*) exit 0 ;;
+		*) echo "Invalid option!" ;;
+	esac
+done
+while :
+do
+	echo
+	echo -n "Should memory-specification ('mosrun -m{mb}') be mandatory? [$defm] :- "
+	read x
+	case "$x" in "") break ;;
+		[yY]*) M=M ; break ;;
+		[nN]*) M= ; break ;;
+		[qQ]*) exit 0 ;;
+		*) echo "Invalid option!" ;;
+	esac
+done
+trap 'rm -f $ROOT/etc/mosix/.msm$$' EXIT
+rm -f /etc/mosix/.msm$$
+echo
+if echo $Q$B$W$M > /etc/mosix/.msm$$
+then
+	mv -f $ROOT/etc/mosix/.msm$$ /etc/mosix/mosrun_admin
+else
+	echo Sorry, no write access on $ROOT/etc/mosix .
+fi
+echo -n "Thank you, that is all: press <Enter> to continue."
+read nothing

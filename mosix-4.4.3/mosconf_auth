@@ -1,0 +1,52 @@
+#!/bin/sh -
+#
+# Copyright (c) 2001 - 2015, Amnon BARAK, all rights reserved.
+# All rights reserved.
+# MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+#
+# THIS SOFTWARE IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+# WHATSOEVER. NO LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING
+# FROM THE USE OF THIS SOFTWARE WILL BE ACCEPTED.
+
+case "$MULTI" in y) pro="multi-cluster private cloud" ;; *) pro=cluster ;; esac
+
+echo
+echo MOSIX Authentication:
+echo =====================
+echo
+echo To protect your MOSIX $pro from abuse, preventing
+echo unauthorised persons from gaining control over your computers,
+echo you need to set up a secret $pro protection key.
+echo This key can include any echo characters, but must be
+echo identical throughout your $pro.
+echo
+if [ -s $ROOT/etc/mosix/secret ]
+then
+	chown root $ROOT/etc/mosix/secret
+	chmod 600 $ROOT/etc/mosix/secret
+	echo You already have a $pro protection key:
+	echo "To keep it, press <Enter>."
+	echo -n "To change it, type the new key here :- " 
+else
+	echo -n "Your secret $pro protection key: "
+fi
+read key
+case "$key" in "")
+	[ -s $ROOT/etc/mosix/secret ] || {
+		echo
+		echo No key was entered - your $pro computers
+		echo are vulnerable to malicious attacks:
+		echo Please come back echo soon and choose a secret
+		echo $pro protection key.
+		echo
+	} ;;
+	*) > $ROOT/etc/mosix/.newsecret
+	   chmod 600 $ROOT/etc/mosix/.newsecret
+	   echo "$key" > $ROOT/etc/mosix/.newsecret
+	   mv $ROOT/etc/mosix/.newsecret $ROOT/etc/mosix/secret
+	   cc=`wc -c $ROOT/etc/mosix/secret | awk '{print $1 - 1}'`
+	   echo Your key is $cc characters long.
+	   case $cc in 1|2|3|4|5)
+		echo "(in the future, please consider a longer one)"
+	   esac ;;
+esac

@@ -1,0 +1,35 @@
+#!/bin/sh -
+# This script should run as a "Epilog"
+# in order to enable VCL within SLURM.
+
+. `dirname $0`/slurm_mosix.conf
+
+[ -f $COMMONDIR/participants.$SLURM_JOB_ID ] || {
+	if [ -x /bin/mosctl ]
+	then
+		/bin/mosctl noblock
+	elif [ -x /usr/bin/mosctl ]
+	then
+		/usr/bin/mosctl noblock
+	elif [ -x /usr/local/bin/mosctl ]
+	then
+		/usr/local/bin/mosctl noblock
+	fi
+	exit 0
+}
+
+if [ -x /sbin/mos_in_job ]
+then
+	turnoff=/sbin/mos_in_job
+elif [ -x /usr/sbin/mos_in_job ]
+then
+	turnoff=/usr/sbin/mos_in_job
+elif [ -x /usr/local/sbin/mos_in_job ]
+then
+	turnoff=/usr/local/sbin/mos_in_job
+else
+	exit 0
+fi
+$turnoff -A `dirname $0`/world.conf
+
+exit 0

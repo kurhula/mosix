@@ -1,0 +1,841 @@
+                      MOSIX ADMINISTRATOR'S GUIDE
+                      ===========================
+                              January 2016
+
+  This guide views MOSIX from the perspective of the system-administrator.
+
+  1. Terminology
+  2. What MOSIX is and is not
+  3. System requirements
+  4. Configuration
+     4.1. General
+     4.2. Configuring the single cluster
+     4.3. Configuring the multi-cluster
+     4.4. Configuring the processor speeds
+     4.5. Configuring the freezing policies
+     4.6. Configuring parameters of 'mosrun'
+  5. Storage allocation
+     5.1. Swap-space
+     5.2. MOSIX files
+     5.3. Freezing space
+     5.4. Private-file space
+  6. Managing processes
+     6.1. Monitoring (mosmon)
+     6.2. Listing MOSIX processes (mosps)
+     6.3. Controlling running processes (mosmigrate)
+     6.5. Controlling the MOSIX node (mosctl)
+     6.6. If you wish to limit what users can run
+  7. Security
+     7.1. Abuse by gaining control of a node
+     7.2. Abuse by connecting hostile computers
+     7.3. Multi-cluster password
+     7.4. Keep the multi-cluster within the same organization
+
+  1. Terminology
+  ==============
+  Node            A participating computer (physical or virtual),
+                  whose unique IP address is configured to be part of
+                  a MOSIX cluster or multi-cluster.
+
+  Processor       A CPU (Central Processing Unit or a Core): most
+                  recent computers have several processors.
+                  (HyperThreads do not constitute different
+                  processors)
+
+  Process         A unit of computation that is started by the "fork"
+                  (or "vfork") system call and maintains a unique
+                  identifier (PID) throughout its life-time (for the
+                  purpose of this document, units of computation that
+                  are started by the "clone" system call are called
+                  "threads" and are not included in this definition).
+
+  Program         An instance of running an executable file: a program
+                  can result in one or more processes.
+
+  Home-node       The node to which a migratable process "belongs": a
+                  migratable process sees the world (file-systems,
+                  network, other processes, etc.) from the perspective
+                  of this node.
+
+  Home-cluster    The cluster to which the home-node of a process
+                  belongs.
+
+  Local process   A process that runs in its home-node.
+
+  Guest process   A process whose home-node is elsewhere, but is
+                  currently running here (on the node being
+                  administered).
+
+  Cluster         One or more computers (nodes) that are owned and
+                  managed by the same entity (a person, a group of
+                  people or a project).  Each MOSIX cluster may range
+                  from a single workstation to a large combination of
+                  computers - workstations, servers, blades, multi-
+                  core computers, etc. possibly of different speeds
+                  and number of processors and possibly in different
+                  locations.  Note that a MOSIX cluster can at times
+                  be different than hardware clusters.  For example,
+                  it can consist of several hardware-clusters or just
+                  part of a hardware-cluster.
+
+  Multi-cluster private cloud (Multi-cluster)
+                  A collection of clusters whose owners trust each
+                  other and wish to share some computational resources
+                  among them.
+
+  Your            (cluster, addresses, nodes, computers, users, etc.)
+                  Those that you currently administer or configure.
+
+  2. What MOSIX is and is not
+  ===========================
+  MOSIX is a package that provides load-balancing by migrating
+  processes within clusters and multi-cluster private clouds.
+
+  MOSIX is intended primarily for High Performance Computing (HPC).
+
+  The main tool employed by MOSIX is PROCESS MIGRATION (a process may
+  start on one node, then move smoothly to other nodes, migration is
+  repeated as necessary (possibly even returning to where it started).
+  Process migration occurs automatically and transparently, in
+  response to resource availability.
+
+  Process migration is utilized to optimize the overall performance.
+
+  MOSIX is not:
+
+  * A cluster set-up and installation tool.
+  * A batch/queuing system (for that, we recommend a different package
+    such as SLURM).
+  * In the Linux kernel or part thereof.
+
+  MOSIX does not:
+
+  * Improve performance of intensive I/O processes
+  * Improve performance of non-computational server-applications (such
+    as web or mail servers)
+  * Support High-Availability
+  * Support shared-memory and threaded processes
+
+  3. System requirements
+  ======================
+  All nodes must have the x86_64 (64-bit) architecture.
+
+  All cores of the same node must have the same speed.
+
+  All the nodes must be connected by a network that supports TCP/IP
+  and UDP/IP.  Each node should have a unique IP address in the range
+  0.1.0.0 to 255.255.254.255 that is accessible to all the other
+  nodes.
+
+  TCP/IP ports 252 and 253 and UDP/IP ports 249 and 253 should be
+  reserved for MOSIX (not used by other applications or blocked by a
+  firewall).
+
+  The Linux kernel should be of version 3.12 or higher, but also
+  acceptable are the standard OpenSUSE kernels since version 13.1 and
+  any Linux kernel patched by an older MOSIX distribution, version
+  3.4.0.0 or higher.
+
+  While any Intel or AMD processors can be used, specific CPUs have
+  added non-standard features, in particular Intel's SSE4.1 and SSE4.2
+  standards, which are not present on either older Intel processors or
+  in AMD processors.  Newer versions of the "glibc" library (after
+  glibc-2.8) detect those features during process-initialisation and
+  record their presence for later optimisations.  Unfortunately, this
+  means that a process which started on a node that has those features
+  will be unable to migrate to nodes that do not have them (if it
+  does, it could crash with an "Illegal Instruction" fault).
+  Accordingly, you should not mix newer Intel processors in the same
+  MOSIX cluster (or multi-cluster) with older Intel processors or with
+  AMD computers.  Alternately, you may re-compile the "glibc" library
+  with the "--disable-multi-arch" flag or obtain such a library from
+  your Linux distribution.  If your MOSIX cluster(s) are on virtual-
+  machines, you may also circumvent the problem by using VMWare's
+  "Enhanced Vmotion Compatiblity".
+
+  MOSIX can be installed on top of any Linux distribution and mixing
+  of different Linux distributions on different nodes is allowed.
+
+  4. Configuration
+  ================
+
+  4.1. General
+  ------------
+  The script "mosconf" will lead you step-by-step through the MOSIX
+  configuration.  Mosconf can be used in two ways:
+
+  1. You can configure (or re-configure) MOSIX on the cluster-node
+     where it should run.  If so, just press <Enter> at the first
+     question that "mosconf" presents.
+
+  2. In clusters (or parts of clusters) that have a central repository
+     of system-files, containing their root image(s), you can make
+     changes in the central repository instead of having to manually
+     update each node separately.
+
+     This repository can for example be NFS-mounted by the cluster as
+     the root file-system, or it can be copied to the cluster at boot
+     time, or perhaps you have some cluster-installation package that
+     uses other methods to reflect those files to the cluster.
+     Whichever method is used, you must have a directory on one of
+     your servers, where you can find the hierarchy of system-files
+     for the clusters (in it you should find subdirectories such as
+     /etc, /bin, /sbin, /usr, "/lib", "/mnt", "/proc" and so on).
+
+     At the first question of "mosconf", enter the full pathname to
+     this repository.
+
+  When modifying the configuration there is no need to stop MOSIX -
+  most changes will take effect automatically within a minute.  The
+  only exception is that if you are modifying either the list of nodes
+  in the cluster (/etc/mosix/mosix.map) or the IP address used for
+  MOSIX (/etc/mosix/mosip) for a cluster (option 2 above), then you
+  must run "mossetpe" on all the cluster-nodes (or restart MOSIX,
+  whichever is convenient).
+
+  The MOSIX configuration is maintained in the directory "/etc/mosix".
+
+  4.2. Configuring the single cluster:
+  -----------------------------------
+
+  4.2.1 Participating nodes
+
+  The most important configuration task is to inform MOSIX which nodes
+  participate in your cluster.  In "mosconf" you do this by selecting
+  "Which nodes are in this cluster".
+
+  Nodes are identified by their IP address (see the advanced options
+  below if they have more than one): commonly the nodes in a cluster
+  have consecutive IP addresses, so it is easy to define them using
+  the IP address of the first node followed by the number of nodes in
+  the range, for example, if you have 10 nodes starting from
+  192.168.3.1 to 192.168.3.10, type "192.168.3.1" followed by "10".
+  If there are several such ranges, you need to specify all of them
+  and if there are nodes with an isolated IP address, you need to
+  specify them as ranges of 1.
+
+  If your IP addresses are mostly consecutive, but there are a few
+  "holes" due to some missing computers, it is not a big deal - you
+  can still specify the full range, including the missing computers
+  (so long as the IP addresses of the "holes" do not belong to other
+  computers elsewhere).
+
+  Specifying too many nodes that do not actually exist (or are down)
+  has been known to produce excessive ARP broadcasts on some networks
+  due to attempts to contact the missing nodes.  This was found to be
+  due to a bug in some routers, but unfortunately many routers have
+  this bug.
+
+  It is always possible to add or delete nodes without stopping MOSIX:
+  if you do it from a central repository, you need to run "mossetpe"
+  on all your cluster nodes for the changes to take effect.
+
+  4.2.2 Automatic configuration of the participating nodes
+
+  MOSIX provides a tool that can automatically detect and configure
+  the participating nodes in most clusters.  You can invoke this tool
+  either within "mosconf" by selecting 'a' under "Which nodes are in
+  this cluster", or by running "mos_autoconf".   This will detect all
+  the nodes on the local TCP/IP subnet which run the same or a very
+  close version of MOSIX (with the same first two digits of the
+  version number), then configure them all accordingly.
+
+  The following conditions apply:
+
+  1. You should be able to identify an IP subnet (no larger than a
+     Class B) that contains all the nodes which you intend to have in
+     your cluster, but no others (such as nodes in your multi-
+     cluster).
+  2. All the above nodes must be up and running.
+  3. An identical MOSIX protection key (password) must be already
+     configured on all the above nodes (but NOT on other nodes that do
+     not belong to this cluster).
+  4. Huge clusters (about 30000 nodes and over) cannot be detected
+     using this tool.
+  5. The advanced options (below) are not automatically configured -
+     if you require those options, then this tool is not recommended
+     because you will need to manually re-configure them afterwards on
+     all nodes.
+
+  This tool will interactively ask the relevant questions about the
+  cluster and can also be used to automatically configure the
+  cluster's logical node numbers.
+
+  4.2.3 Advanced options
+
+  All the options below are advanced - if no advanced options were
+  previously configured, type "+" in "mosconf".  As above, it is not
+  necessary to stop MOSIX for modifying those options, but you need to
+  run "mossetpe" after changing them from a central repository.
+
+  A. Nearby or distant
+
+  To optimize process migration, for each range of nodes, you can
+  define whether they are "distant" or "near" the nodes that you are
+  configuring.  The reason is that when networking is slow, it is
+  better to compress the memory image of migrating processes: it takes
+  CPU time, but saves on network transfer time and volume.  If however
+  the nodes are near, it is better not to compress.  As a general
+  guideline, specify "distant" if the network is slower than 1GB/sec,
+  or is 1GB/sec and the nodes are in different buildings, or if the
+  nodes are several kilometers away.
+
+  B. Aliases
+
+  Some nodes may be connected to more than one network, thus have
+  several IP addresses.   Messages from another node could thus seem
+  to arrive from an IP address other than the one used to send
+  messages to that node.  Aliases allow MOSIX to identify different IP
+  addresses through which valid MOSIX messages could arrive and
+  associate them with one of its configured nodes.
+
+  For example, two physical clusters can each be internally connected
+  by a faster Infiniband link, but only linked between them by
+  Ethernet.  To use the Infiniband, configure nodes within the
+  physical cluster, INCLUDING THE LOCAL NODE with their Infiniband
+  address and outside the physical cluster with their Ethernet
+  address.  As nodes from the other cluster would identify themselves
+  using an unreachable Infiniband address, these addresses must be
+  aliased to the respective Ethernet IP addresses of the other
+  cluster.
+
+  Another example is of a junction node which apart from being part of
+  a logical MOSIX cluster also serves as a router between physical
+  clusters.  As the junction node can have only one MOSIX IP address,
+  which belongs (at most) to only one of the clusters, the other
+  cluster(s) must use an alias to identify the junction node as it
+  appears on their own network.
+
+
+  C. Unusual circumstances with IP addresses
+
+  There are rare cases when the IP address of a node does not appear
+  in the output of "ifconfig" and even more rare cases when more than
+  one IP address that belongs to a node is configured as part of the
+  MOSIX cluster AND appears in the output of "ifconfig" (for example,
+  a node with two Network-Interface-Cards sometimes boots with one,
+  sometimes with the other and sometimes with both, so MOSIX has both
+  addresses configured "just in case").  When this happens, you need
+  to manually configure the main MOSIX address (using "Miscellaneous
+  policies" of "mosconf").
+
+  4.3. Configuring the multi-cluster:
+  -----------------------------------
+
+  4.3.1 Partner-clusters
+
+  Now is the time to inform MOSIX which other clusters (if any) are
+  part of your MOSIX multi-cluster private cloud.
+
+  In a MOSIX multi-cluster, there is no need for each cluster to be
+  aware of all the other clusters, but only of those partner-clusters
+  that we want to send processes to or are willing to accept processes
+  from.
+
+  You should identify each partner-cluster with a name: usually just
+  one word (if you need to use more, do not use spaces, but '-' or '_'
+  to separate the words).  Please note that this name is for your own
+  use and does not need to be identical across the multi-cluster.
+  Next you can add a longer description (in a few words), for better
+  identification.
+
+  4.3.2 Which nodes are in a partner-cluster
+
+  Nodes of partner-clusters are defined by ranges of IP addresses,
+  just like in the local cluster - see above.  As above, a few "holes"
+  are acceptable.
+
+  For each range of nodes that you define, you will be asked: "Are
+  these nodes distant [Y/n]?"  (or "Is this node distant [Y/n]?" in
+  the case of a single node).  "nearby" and "distant" are defined in
+  section 4.2.3.A above, but unlike the local cluster, the default
+  here is "distant".
+
+  4.3.3 Partner-cluster relationship
+
+  By default, migration can occur in both directions: local processes
+  are allowed to migrate to partner-clusters and processes from
+  partners-clusters are allowed to migrate to the local cluster
+  (subject to priorities, see below).  As an option, you can allow
+  migration only in one direction (or even disallow migration
+  altogether if all you want is to be able to view the load and status
+  of the other cluster).
+
+  4.3.4 Priorities
+
+  Each cluster is given a priority: this is a number between 0 and
+  65535 (0 is not recommended as it is the local cluster's own
+  priority) - the lower it is, the higher the priority.  When one or
+  more processes originating from the local cluster, or from partner-
+  clusters of higher priority (lower number), wish to run on a node
+  from our cluster, all processes originating from clusters of a lower
+  priority (higher number) are immediately moved out (evacuated) from
+  this node (often, but not always, back to their home cluster).  When
+  you define a new partner-cluster, the default priority is 50.
+
+  4.3.5 Priority stabilization
+
+  The following option is suitable for situations where the local node
+  is normally occupied with privileged processes (either local
+  processes, processes from your own cluster or processes from more
+  privileged clusters), but repeatedly becomes idle for short periods.
+
+  If you know that this is the pattern, you may want to prevent
+  processes from other clusters from arriving during these short gaps
+  when the local node is idle, only to be sent away shortly after.
+  You can define a minimal gap-period (in seconds) once all higher-
+  privileged processes terminated (or left).  During that period
+  processes of less-privileged clusters cannot arrive: use
+  "Miscellaneous policies" of "mosconf" to define the length of this
+  period.
+
+  4.3.6 Maximum number of guests
+
+  While the number of guest processes from your own cluster is
+  unlimited, the maximal number of simultaneous guest-processes from
+  partner-clusters can be limited and you can change that maximum by
+  using "Miscellaneous policies" in "mosconf".
+
+  4.4 Configuring the processor speeds:
+  ------------------------------------
+
+  In the past, MOSIX used to detect the processor's speed
+  automatically.  Due to the immense diversification of processors and
+  their special features which accelerate certain applications, but
+  not others, this is no longer feasible.  Even the processor's
+  frequency-clock is no longer a reliable indicator for the
+  processor's speed (and it can even be variable).
+
+  It is therefore recommended that you set the processor speeds
+  manually, based either on information about your computers,
+  benchmark web-sites, or measuring the performance of actual
+  applications that your users intend to run on the MOSIX cluster(s).
+
+  The nodes with your most typical processor should usually have the
+  speed of 10000, which is also the default speed set by MOSIX,
+  whereas faster nodes should have proportionally higher speeds and
+  slower nodes should have proportionally lower speeds.  However, if
+  you add new computers to your cluster(s), you are not required to
+  adjust the speeds of existing nodes - you may simply configure the
+  new computers relative to the ones you had before.
+
+  4.5. Configuring the freezing policies:
+  --------------------------------------
+
+  4.5.1 Overview
+
+  When too many processes are running on their home node, the risk is
+  that memory will be exhausted, the processes will be swapped out and
+  performance will decline drastically.  In the worst case, swap-space
+  may also exhausted and then the Linux kernel will start killing
+  processes.  This scenario can happen for many reasons, but the most
+  common one is when another cluster shuts down, forcing a large
+  number of processes to return home simultaneously.  The MOSIX
+  solution is to freeze such returning processes (and others), so they
+  do not consume precious memory, then restart them again later when
+  more resources become available.
+
+  Below we discuss how to set up the policy for automatic freezing to
+  handle different scenarios of process-flooding.   This policy does
+  not affect:
+
+  A) Processes that are manually frozen ("mosmigrate {pid} freeze").
+  B) Processes which the user deemed "unfreezable" ("mosrun -g").
+  C) Guest processes: they migrate out instead when the load is high.
+
+  4.5.2 Freezing-policy details
+
+  In this section, the term "load" refers to the local node.
+
+  The policy consists of:
+
+  * The "Red-Mark": when the load reaches above this level, processes
+    will start to be frozen until the load drops below this mark.
+
+  * The "Blue-Mark": when the load drops below this level, processes
+    start to un-freeze.  Obviously the "Blue-Mark" must be
+    significantly less than the "Red-Mark".
+
+  * "Home-Mark": when the load is at this level or above and processes
+    are evacuated from other clusters back to their home-node, they
+    are frozen on arrival (without consuming a significant amount of
+    memory while migrating).
+
+  * "Cluster-Mark": when the load is at this level or above and
+    processes from this home-node are evacuated from other clusters
+    back to this cluster, they are instead brought frozen to their
+    home-node.
+
+  * Whether the load for the above 4 load marks ("Red", "Blue",
+    "Home", "Cluster") is expressed in units of processes or in
+    standardized MOSIX load: The number of processes is more natural
+    and easier to understand, but the MOSIX load is more accurate and
+    takes into account the number and speed of the processors:
+    roughly, a MOSIX load unit is the number of processes divided by
+    the number of processors (CPUs) and by their speed relative to a
+    "standard" processor.  Using the MOSIX standardized load is
+    recommended in clusters with nodes of different types - if all
+    nodes in the cluster have about the same speed and the same number
+    of processors/cores, then it is recommended to use the number of
+    processes.
+
+  * Whether to keep a given, small number of processes running (not
+    frozen) at any time despite the load.
+
+  * Whether to allow only a maximum number of processes to run (that
+    run on their home-node - not counting migrated processes),
+    freezing any excess processes even when the load is low .
+
+  * Time-slice for switching between frozen processes: whenever some
+    processes are frozen and others are not, MOSIX rotates the
+    processes by allowing running processes a given number of minutes
+    to run, then freezing them to allow another process to run
+    instead.
+
+  * Policy for killing processes that failed to freeze, expressed as
+    memory-size in MegaBytes: in the event that freezing fails (due to
+    insufficient disk-space), processes that require less memory are
+    kept alive (and in memory) while process requiring the given
+    amount of memory or more, are killed.  Setting this value to 0,
+    causes all processes to be killed when freezing fails.  Setting it
+    to a very high value (like 1000000 MegaBytes) keeps all processes
+    alive.
+
+  When defining a freezing policy, the default is:
+
+      RED-MARK         = 6.0 MOSIX standardized load units
+      BLUE-MARK        = 4.0 MOSIX standardized load units
+      HOME-MARK        = 0.0 (eg. always freeze evacuated processes)
+      CLUSTER-MARK     = -1.0 (eg. never freeze evacuated processes)
+      MINIMUM-UNFROZEN = 1 (process)
+      MAXIMUM-RUNNING  = unlimited
+      TIME-SLICE       = 20 minutes
+      KILLING-POLICY   = always
+
+  4.5.3 Disk-space for freezing
+
+  Next, you need inform MOSIX where to store the memory-image of
+  frozen processes, which is configured as directory-name(s): the
+  exact directory name is not so important (because the memory-image
+  files are unlinked as soon as they are created), except that it
+  specifies particular disk partition(s).
+
+  The default is that all freeze-image files are created in the
+  directory (or symbolic-link) "/freeze" (please make sure that it
+  exists, or freezing will always fail).  Instead, you can select a
+  different directory(/disk-partition) or up to 10 different
+  directories.
+
+  If you have more than one physical disk, specifying directories on
+  different disks can help speeding up freezing by writing the memory-
+  image of different processes in parallel to different disks.  This
+  can be important when many large processes arrive simultaneously
+  (such as from other clusters that are being shut-down).
+
+  You can also specify a "probability" per directory (eg. per disk):
+  This defines the relative chance that a freezing process will use
+  that directory for freezing.  The default probability is 1 (unlike
+  in statistics, probabilities do not need to add up to 1.0 or to any
+  particular value).
+
+  When freezing to a particular directory (eg. disk-partition) fails
+  (due to insufficient space), MOSIX will try to use the other
+  freezing directories instead, thus freezing fails only when all
+  directories are full.  You can specify a directory with probability
+  0, which means that it will be used only as a last resort (it is
+  useful when you have faster and slower disks).
+
+  4.5.4 Ownership of freezing-files
+
+  Freezing memory-image files are usually created with Super-User
+  ("root") privileges.  If you do your freezing via NFS (it is slow,
+  but sometimes you simply do not have a local disk), some NFS servers
+  do not allow access to "root": if so, you can select a different
+  user-name, so that memory-image files will be created under its
+  privileges.
+
+  4.5 Configuring parameters of 'mosrun':
+  ---------------------------------------
+
+  Some system-administrators prefer to limit what their users can do,
+  or at least to set some defaults for their less technically-inclined
+  users.  You can control some of the options of "mosrun" by using the
+  "Parameters of 'mosrun'" option of "mosconf".  The parameters you
+  can control are:
+
+  1. Selection of the best node to start on: either let the user
+     decide ; make "mosrun -b" the default when no other location
+     parameter is specified ; or force the "mosrun -b" option on all
+     ordinary users.
+  2. Handling of unsupported system-calls: either leave the default of
+     killing the process if an unsupported system-call is encountered
+     (unless the user specifies "mosrun -e" or "mosrun -w" ; making
+     "mosrun -e" the default ; or making "mosrun -w" the default.
+  3. Whether or not to make the "mosrun -m{mb}" parameter mandatory:
+     this may burden users, but it can help protecting your computers
+     against memory/swap exhaustion and even loss or processes as a
+     result.
+
+  To begin with, no defaults or enforcements are active when MOSIX is
+  shipped.
+
+  5. Storage allocation:
+  ======================
+
+  5.1. Swap space:
+  ---------------
+  As on a single computer, you are responsible to make sure that there
+  is sufficient swap-space to accommodate the memory demands of all
+  the processes of your users: the fact that processes can migrate
+  does not preclude the possibility of them arriving at times back to
+  their home-node for a variety of reasons: please consider the worst-
+  case and have sufficient swap-space for all of them.
+
+  You do not need to take into account programs having their home-node
+  elsewhere in your cluster.
+
+  5.2. MOSIX files:
+  ----------------
+  During the course of its operation, MOSIX creates and maintains a
+  number of small files in the directory "/etc/mosix/var".  When there
+  is no disk-space to create those files, MOSIX operation (especially
+  load-balancing and queuing) will be disrupted.
+
+  When MOSIX is installed for the first time (or when upgrading from
+  an older MOSIX version that had no "/etc/mosix/var"), you are asked
+  whether you prefer "/etc/mosix/var" to be a regular directory or a
+  symbolic link to "/var/mosix".  However, you can change it later.
+
+  Normally the disk-space in the root partition is never exhausted, so
+  it is best to let "/etc/mosix/var" be a regular directory, but some
+  diskless cluster installations do not allow modifications within
+  "/etc": if this is the case, then "/etc/mosix/var" should be a
+  symbolic link to a directory on another partition which is writeable
+  and have the least chance of becoming full.  This directory should
+  be owned by "root", with "chmod 755" permissions and contain a sub-
+  directory "multi/".
+
+  5.3. Freezing space:
+  -------------------
+  MOSIX processes can be temporarily frozen for a variety of reasons:
+  it could be manually using the command: "mosmigrate {pid} freeze"
+  (which as the Super-User you can also use to freeze any user's
+  processes), or automatically as the load increases, or when
+  evacuated from another cluster.  In particular, when another
+  cluster(s) shuts down, many processes can be evacuated back home and
+  frozen simultaneously.
+
+  Frozen processes keep their memory-contents on disk, so they can
+  release their main-memory image.  By default, if a process fails to
+  write its memory- contents to disk because there is insufficient
+  space, that process is killed: this is done in order to save the
+  system from filling up the memory and swap-space, which causes Linux
+  to either be deadlocked or start killing processes at random.
+
+  As the system-administrator, you want to keep the killing of frozen
+  processes only as the last resort: use either or both of the
+  following two methods to achieve that:
+  1. Allocate freezing directory(s) on disk partitions with sufficient
+     free disk-space: freezing is by default to the "/freeze"
+     directory (or symbolic-link), but you can re-configure it to any
+     number of freezing directories.
+  2. Configure the freezing policy so that processes are not killed
+     when freeze-space is unavailable unless their memory-size is
+     extremely big (specify that threshold in MegaBytes - a value such
+     as 1000000MB would prevent killing altogether).
+
+  5.4. Private-File space:
+  -----------------------
+  MOSIX users have the option of creating private files that migrate
+  with their processes.  If the files are small (up to 10MB per
+  process) they are kept in memory - otherwise they require backing
+  storage on disk and as the system-administrator it is your
+  responsibility to allocate sufficient disk-space for that.
+
+  You can set up to 3 different directories (therefore up to 3 disk
+  partitions) for the private files of local processes ; guest
+  processes from the same cluster ; and guest processes from other
+  clusters.  For each of those you can also define a per-process
+  quota.
+
+  When a guest process fails to find disk-space for its private files,
+  it will transparently migrate back to its home-node, where it is
+  more likely to find the needed space; but when a local process fails
+  to find disk-space, it has nowhere else to go, so its "write()"
+  system-call will fail, which is likely to disrupt the program.
+
+  Efforts should therefore be made to protect local processes from the
+  risk of finding that all the disk-space for their private files was
+  already taken by others: the best way to do it is to allocate a
+  separate partition at least for local processes (by default, space
+  for private files is allocated in "/private" for both local and
+  guest processes)
+
+  For the same reason, local processes should usually be given higher
+  quotas than guest processes (the default quotas are 5GB for local
+  processes, 2GB for guests from the cluster and 1GB for guests from
+  other clusters).
+
+
+  6. Managing processes:
+  ======================
+  As the system administrator you can make use of the following tools:
+
+  6.1 Monitoring (mosmon)
+
+  mosmon ("man mosmon"): monitor the load, memory-use and other
+  parameters of your MOSIX cluster or even the whole multi-cluster.
+
+  6.2 Listing MOSIX processes (mosps)
+
+  mosps ("man mosps"): view information about current MOSIX processes.
+  In particular, "mosps a" shows all users, and "mosps -V" shows guest
+  processes.  Please avoid using "ps" because each MOSIX process has a
+  shadow son process that "ps" will show, but you should only access
+  the parent, as shown by "mosps".
+
+  6.3 Controlling running processes (mosmigrate)
+
+  mosmigrate ("man mosmigrate"): you can manually migrate the
+  processes of all users - send them away; bring them back home; move
+  them to other nodes; freeze; or unfreeze (continue) them, overriding
+  the MOSIX system decisions as well as the placement preferences of
+  users.  Even though as the Super-User you can technically do so, you
+  should never kill (signal) guest processes.  Instead, if you find
+  guest processes that you don't want running on one of your nodes,
+  you can use "mosmigrate" to send them away (to their home-node or to
+  any other node).
+
+  6.5 Controlling the MOSIX node (mosctl)
+
+  mosctl ("man mosctl"): This utility provides a variety of functions.
+  The most important are:
+
+     "mosctl stay" - prevent automatic migration away from this node.
+    ("mosctl nostay" to undo)
+
+     "mosctl lstay" - prevent automatic migration of local processes
+         away from this node.
+    ("mosctl nolstay" to undo)
+
+     "mosctl block" - do not allow further migrations into this node.
+    (mosctl noblock" to undo)
+
+     "mosctl expel" - send away all guest processes.  You would
+         usually combine it with using "mosctl block" first.
+
+     "mosctl bring" - bring back all processes from this home-node.
+         You would usually combine it with using "mosctl lstay" first.
+
+     "mosctl isolate" - isolate the node from the multi-cluster (but
+         not from its cluster).
+    ("mosctl rejoin" to undo)
+
+     "mosctl cngpri {partner} {newpri}" - modify the guest-priority of
+         another cluster in the multi-cluster (the lower the better).
+
+     "mosctl shutdown" - isolate the node from all others (but first
+         expel all guest processes and bring back all processes from
+         this home-node).
+
+     "mosctl localstatus" - check the health of MOSIX on this node.
+
+  6.6 If you wish to limit what users can run
+
+  Some installations want to restrict access to "mosrun" or force its
+  users to comply with a local policy by using (or not using) some of
+  mosrun's options.  For example:
+
+       * Force users to specify how much memory their program needs.
+       * Limit the number of "mosrun" processes that a user can run
+         simultaneously (or per day).
+       * Log all calls to "mosrun" by certain users.
+       * Limit certain users to run only in their local cluster, but
+         not in their multi-cluster
+
+  etc. etc. etc.
+
+  Here is a technique that you can use to achieve this:
+
+      1. Allocate a special (preferably new) user-group for mosrun (we
+         shall call it "mos" in this example).
+
+      2. Run: "chgrp mos /bin/mosrun"
+
+      3. Run: "chmod 4750 /bin/mosrun"
+
+         (steps 2 and 3 must be repeated every time you upgrade MOSIX)
+
+      4. Write a wrapper program (we shall call it "/bin/wrapper" in
+         this example), which receives the same parameters as
+         "mosrun", checks and/or modifies its parameters according to
+         your desired local policies, then executes:
+               "/bin/mosrun -p {mosrun-parameters}".
+         Below is the "C" code of a primitive wrapper prototype that
+         passes its arguments to "mosrun" without modifications:
+
+         #include <malloc.h>
+         main(int na, char *argv[])
+         {
+                 char **newargs = malloc((na + 2)  * sizeof(char *));
+                 int i;
+
+                 newargs[0] = "mosrun";
+                 newargs[1] = "-p";
+                 for(i = 1 ; i < na ; i++)
+                         newargs[i+1] = argv[i];
+                 newargs[i+1] = (char *)0;
+                 execv("/bin/mosrun", newargs);
+         }
+
+      5. chgrp mos /bin/wrapper
+
+      6. chmod 2755 /bin/wrapper
+
+      7. Tell your users to use "wrapper" (or any other name you
+         choose) instead of "mosrun".
+
+  7. Security
+  ===========
+
+  7.1 Abuse by gaining control of a node
+
+  A hacker that gains Super-User access on any node of any cluster
+  could intentionally use MOSIX to gain control of the rest of the
+  cluster and multi-cluster private cloud.  Therefore, before joining
+  into a MOSIX multi-cluster private cloud, trust needs to be
+  established among the owners (Super-Users) of all clusters involved
+  (but not necessarily among ordinary users).  In particular, system-
+  administrators within a MOSIX multi-cluster need to trust that all
+  the other system-administrators have their computers well protected
+  against theft of Super-User rights.
+
+  7.2 Abuse by connecting hostile computers
+
+  Another risk is of hostile computers gaining physical access to the
+  internal cluster's network and masquerading the IP address of a
+  friendly computer, thus pretending to be part of the MOSIX
+  cluster/multi-cluster.  Normally within a hardware cluster, as well
+  as within a well-secured organization, the networking hardware
+  (switches and routers) prevents this, but you should especially
+  watch out for exposed Ethernet sockets (or wireless connections)
+  where unauthorized users can plug their laptop computers into the
+  internal network.  Obviously, you must trust that the other system-
+  administrators in your multi-cluster private cloud maintain a
+  similar level of protection from such attacks.
+
+  7.3 Multi-cluster password
+
+  Part of configuring MOSIX ("Authentication" of "mosconf") is
+  selecting a protection key (password), which is shared by the entire
+  multi-cluster.  Please make this key highly-secure - a competent
+  hacker that obtains it can gain control over your computers and
+  thereby the entire multi-cluster private cloud.
+
+  7.4. Keep the multi-cluster within the same organization
+
+  The above level of security is usually only achievable within the
+  same organization, hence we use the term "multi-cluster private
+  cloud", but if it can exist between different organizations, then
+  from a technical point of view, nothing else prevents them from
+  sharing a MOSIX multi-cluster.

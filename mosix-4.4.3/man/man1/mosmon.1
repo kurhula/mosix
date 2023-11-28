@@ -1,0 +1,121 @@
+.\" copyright (c) 2005 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "May 2006"
+.ds section M1
+.ds operating-system MOSIX
+.ds document-title MOSMON
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Nm \&mosmon
+.Nd MOSIX monitor
+.Sh SYNOPSIS
+.Nm \&mosmon
+.Op Fl v | V | w
+.Op Fl t
+.Op Fl d
+.Op Fl s | m | m m | f | c | l
+.Sh DESCRIPTION
+.Nm \&Mosmon
+displays useful current information about MOSIX nodes.
+The information is represented as a bar-chart, which allows a
+comparison between different nodes.
+.Pp
+The display shows nodes that are assigned node numbers in
+.Pa /etc/mosix/userview.map
+(see
+.Pa mosix(7) ) .
+.Pp
+The following options are available:
+.Bl -tag -width abcde
+.It Fl w
+Select horizontal numbering: better display - but less nodes are visible.
+.It Fl v
+Select vertical numbering: more nodes are visible - but denser display.
+.It Fl V
+Select tight vertical numbering: maximal number of nodes are visible - but
+even denser display.
+.It Fl t
+Display the number of operational nodes and number of CPUs.
+.It Fl d
+Display also dead (not responding) nodes.
+.It Fl s
+Display the CPU-speeds.
+.It Fl m
+Display the used vs. total memory.
+.It Fl m m
+Display the used vs. total swap space.
+.It Fl f
+Display the number of frozen processes.
+.It Fl c
+Display the number of cores.
+.It Fl l
+Display the load (default).
+.El
+.Pp
+While in
+.Pa mosmon ,
+the following keys may be used:
+.Bl -tag -width enter
+.It Pa v
+Select vertical numbering.
+.It Pa V
+Select tight vertical numbering.
+.It Pa w
+Select horizontal numbering.
+.It Pa a
+Select automatic numbering (vertical numbering will be selected if it would
+make the difference between viewing all nodes or not - otherwise, horizontal
+numbering is selected).
+.It Pa s
+Display CPU-speeds and number of nodes (if more than 1).
+.br
+10000 units represent a standard 3GHz processor.
+.It Pa m
+Display used memory vs. total memory: the used memory is displayed as a
+solid bar while the total memory is extended with '+' signs.  The memory is
+shown in Megabytes.
+.It Pa m m
+(pressing
+.Pa m
+twice) Display used swap-space vs. total swap-space: the used swap-space is displayed
+as a solid bar while the total swap-space is extended with '+' signs.
+Swap-space is shown in Gigabytes and is accurate to 0.1GB.
+.It Pa f
+Display the number of frozen processes.
+.It Pa l
+Display loads.  The load represents one CPU-bound process 
+that runs on a node with a single CPU under normal conditions.
+The load increases proportionally on slower CPUs, and decreases
+proportionally on faster CPUs and on nodes with more than one CPU.
+.It Pa d
+Display also dead (not-responding) nodes.
+.It Pa D
+Stop displaying dead nodes.
+.It Pa t
+Toggle displaying the count of operational nodes.
+.It Pa Right-Arrow
+Move one node to the right (when not all nodes fit on the screen).
+.It Pa Left-Arrow
+Move one node to the left (when not all nodes fit on the screen).
+.It Pa n
+Move one screen to the right (when not all nodes fit on one screen).
+.It Pa p
+Move one screen to the left (when not all nodes fit on one screen).
+.It Pa h
+Bring up a help screen.
+.It Pa Enter
+Redraw the screen.
+.It Pa q
+Quit
+.Nm \&Mosmon.
+.El
+.Sh SEE ALSO
+.Xr mosix 7 .

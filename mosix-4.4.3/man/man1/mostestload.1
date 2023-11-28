@@ -1,0 +1,124 @@
+.\" Copyright (c)  2000 - 2015, Amnon BARAK, all rights reserved.
+.\" All rights reserved.
+.\"
+.\"	MOSIX $Id: test_load.man,v 1.11 2007-05-31 06:10:56 lior Exp $
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds document-title MOSTESTLOAD
+.ds volume MOSIX EXTRAS
+.ds date-string January 2014
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa mostestload
+- MOSIX test program
+.Sh SYNOPSIS
+.Pa mostestload [OPTIONS]
+.Sh DESCRIPTION
+A test program that generates artificial load and consumes memory for testing the operation of MOSIX.
+.Sh OPTIONS
+.Bl -tag -compact -width abc
+.It Pa -t{seconds} | --time={seconds}
+Run for a given number of CPU
+.Pa seconds :
+the default is 1800 seconds (30 minutes).
+A value of 0 causes
+.Pa mostestload
+to run indefinitely.  OR:
+.It Pa -t{min},{max} | --time={min},{max}
+Run for a random number of seconds between
+.Pa min
+and
+.Pa max .
+.It Pa -m{mb}, --mem={mb}
+amount of memory to consume in Megabytes (by default,
+.Pa mostestload
+consumes no significant amount of memory).
+.It Pa --random-mem
+Fill memory with a random pattern (otherwise, memory is filled with
+the same byte-value).
+.It Pa --cpu={N}
+When testing pure CPU operations - perform
+.Pa N
+units of CPU work, then exit.
+When also doing system-calls
+.Pa ( --read , --write , --noiosyscall ) -
+perform
+.Pa N
+units of CPU work between chunks of system-calls.
+.It Pa --read[={size}[,{ncalls}[,{repeats}]]
+.It Pa --write[={size}[,{ncalls}[,{repeats}]]
+perform
+.Pa read
+OR
+.Pa write
+system calls of
+.Pa size
+KiloBytes (default=1KB).  These calls are repeated in a chunk of
+.Pa ncalls
+times (default=1024), then those chunks are repeated
+.Pa repeats
+times (default=indefinitely), with optional CPU work between chunks
+if the
+.Pa --cpu
+option is also set.
+.It Pa --noiosyscall={ncalls}[,{repeats}]
+perform some other system call that does not involve I/O
+.Pa ncalls
+times (default=1024), repeat this
+.Pa {repeats}
+times (default=indefinitely), with optional CPU work in between if the
+.Pa --cpu
+option is also set.
+.It Pa -d, --dir={directory}
+.It Pa -f, --file={filename}
+select a directory OR a file on which to perform reading or writing
+(the default is to create a file in the /tmp directory).
+.It Pa --maxiosize={SIZE}
+Once the file size reaches
+.Pa SIZE
+megabytes, further I/O will resume at the beginning of the file.
+.It Pa -v, --verbose
+produce debug-output.
+.It Pa --report-migrations
+Report when
+.Pa mostestload
+migrates.
+.It Pa -r, --report
+Produce summary at end of run.
+.It Pa --sleep SEC
+Sleep for 
+.Pa SEC
+seconds before starting
+.It Pa -h, --help
+Display a short help screen.
+.El
+.Sh EXAMPLES
+.Pp
+.Pa mostestload -t 20
+.br
+run CPU for 20 seconds
+.Pp 
+.Pa mostestload -l 10 -h 20
+.br
+runs CPU for a random period of time between 10 and 20 seconds. 
+.Pp
+.Pa mostestload -f /tmp/20MB --write 32,640,1
+.br
+writes 32 KiloBytes of data 640 times (total 20 megabytes) to the file
+/tmp/20MB.
+.Pp 
+.Pa mostestload -f /tmp/10MB --write 32,640 --maxiosize 10 --cpu=20
+.br
+writes 32 KiloBytes of data 640 times (total 20 megabytes) to the file
+/tmp/10MB, alternating this indefinitely with running 20 units of CPU.
+The file "/tmp/10MB" is not allowed to grow beyond 10 MegaBytes:
+once reaching that limit, writing resumes at the beginning of the file.
+.Sh AUTHOR  
+Adapted from code by Lior Amar

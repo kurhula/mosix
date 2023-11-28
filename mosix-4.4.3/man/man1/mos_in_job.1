@@ -1,0 +1,69 @@
+.\" copyright (c) 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "June 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds volume MOSIX Commands
+.ds date-string June 2014
+.ds document-title MOS_IN_JOB
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOS_IN_JOB
+- Configure MOSIX at the start/end of an external job
+.Sh SYNOPSIS
+.Nm \&mos_in_job
+.Pa [ -A ] {world-file} [own-cluster]
+.Pp
+.Sh DESCRIPTION
+.Pa mos_in_job
+configures MOSIX to run in either of two modes: as part of a temporary
+logical cluster; or standing alone at the service of other clusters.
+Typically, the temporary cluster would be allocated for a particular 'job'
+by an external package.
+.Pp
+The file
+.Pa {world-file}
+describes which nodes/computers should be configured in the multi-cluster.
+Each line of
+.Pa {world-file}
+has a host-name or an IP address, optionally followed (space-separated)
+by the number of hosts with consecutive IP addresses that should be
+configured (the default is 1).  The local node must be included in that file.
+.Pp
+When provided,
+.Pa {own-cluster}
+is a comma-separated list of nodes that should form the local cluster
+(the local node must be included in that list).
+The local cluster is then configured accordingly and all other nodes
+that appear in
+.Pa {world-file}
+form another cluster, to which local processes can be migrated, but from
+which no guest processes are accepted.
+.Pp
+When the
+.Pa {own-cluster}
+parameter is not provided, the local node is configured as a cluster on its
+own and all other nodes that appear in
+.Pa {world-file}
+are configured as another cluster, from which guest processes may arrive,
+but to which no local processes may go.
+.Pp
+The
+.Pa [-A]
+argument causes
+.Pa mos_in_job
+to return immediately after changing the configuration - otherwise
+.Pa mos_in_job
+waits until all guest processes that must no longer run on the local node
+according to the updated configuration, are expelled; and all local processes
+that run where they should not according to the updated configuration, are
+migrated elsewhere.
+.Sh SEE ALSO
+.Xr mossetpe 1 ,
+.Xr mosix 7 .

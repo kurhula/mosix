@@ -1,0 +1,41 @@
+#!/bin/sh -
+# This script should run as a "PrologSlurmctld"
+# in order to help setting the MOSIX configuration for a SLURM job.
+
+. `dirname $0`/slurm_mosix.conf
+
+found_mosix=n
+for c in `echo $SLURM_JOB_CONSTRAINTS | tr '[],|&*' '      '`
+do
+	case $c in mosix) found_mosix=y ;; esac
+done
+case $found_mosix in n)
+	[ -d $COMMONDIR ] && rm -f $COMMONDIR/participants.$SLURM_JOB_ID
+	exit 0
+esac
+
+[ -d $COMMONDIR ] || {
+	echo "Improper COMMONDIR in slurm_mosix.conf."
+	exit 1
+}
+
+[ -d $SLURMBIN ] || {
+	echo "Improper SLURMBIN in slurm_mosix.conf."
+	exit 1
+}
+
+z=`$SLURMBIN/scontrol show hostnames "$SLURM_JOB_NODELIST"`
+w=
+for x in $z
+do
+	case $x in [0-9]*) : ;;
+		*) h=`/usr/bin/host -4 $x | fgrep " has address "`
+		   case $h in ?*)
+			x=`expr "$h" : '^.* has address \(.*\)$'` ;;
+		   esac ;;
+	esac
+	case $w in ?*) w=$w,$x ;; *) w=$x ;; esac
+done
+echo $w > $COMMONDIR/participants.$SLURM_JOB_ID
+chmod 644 $COMMONDIR/participants.$SLURM_JOB_ID
+exit 0

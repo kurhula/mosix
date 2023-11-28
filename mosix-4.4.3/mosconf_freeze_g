@@ -1,0 +1,566 @@
+#!/bin/sh -
+#
+# Copyright (c) 2001 - 2015, Amnon BARAK, all rights reserved.
+# All rights reserved.
+# MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+#
+# THIS SOFTWARE IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+# WHATSOEVER. NO LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING
+# FROM THE USE OF THIS SOFTWARE WILL BE ACCEPTED.
+
+PATH=/sbin:/usr/sbin:/usr/local/sbin:/bin:/usr/bin:/usr/local/bin
+trap 'rm -f /tmp/.tfr$$ /tmp/.err$$' EXIT
+
+read_conf() {
+	user=root
+	nd=0
+	nc=0
+	while read one two three four five six seven eight nine ten more
+	do
+		case "$one" in /*)
+			nd=`expr $nd + 1`
+			eval dir$nd=$one
+			case $two in [.0-9]*)
+				eval weight$nd=$two ;;
+				*) eval weight$nd=1.0 ;;
+			esac ;;
+			U) case "$two" in [a-z]* | [0-9]*) user=$two ;; esac ;;
+			1) case "$four" in "") continue ;; esac
+				case "$two$three$four" in *#*) continue ;; esac
+				case "$five" in "") five=-1.0 ; six= ;; esac
+				case "$six" in "") six=-1.0 ; seven= ;; esac
+				case "$seven" in "") seven=0 ; eight= ;; esac
+				case "$eight" in "") eight=-1 ; nine= ;; esac
+				case "$nine" in "") nine=20 ; ten= ;; esac
+				case "$ten" in "") ten=0 ;; esac
+				nc=1
+				unit1=$two
+				red1=$three
+				blue1=$four
+				mina1=$five
+				minc1=$six
+				mink1=$seven
+				maxp1=$eight
+				slice1=$nine
+				mb1=$ten
+				;;
+		esac
+	done
+}
+
+isint() {
+	case $1 in ""|*[!0-9]*) return 1 ;; *) return 0 ;; esac
+}
+
+isreal() {
+	case $1 in ""|.|*.*.*|*[!.0-9]*) return 1 ;; *) return 0 ;; esac
+}
+
+if [ -f $ROOT/etc/mosix/freeze.conf ]
+then
+	read_conf < $ROOT/etc/mosix/freeze.conf
+else
+	read_conf < /dev/null
+fi
+while :
+do
+echo
+echo Freezing Policy:
+echo ================
+echo
+case $nc in 0) echo No automatic freezing policy is currently defined. ;;
+	1) echo An automatic freezing policy exists. ;;
+esac
+case $nc in 0)
+   echo "To define an automatic freezing policy, type 'f'." ;;
+*) echo
+   echo "To modify the automatic freezing policy, type '1'."
+   echo "To cancel automatic freezing, type '-f'." ;;
+esac
+echo
+echo Advanced options:
+echo -----------------
+case $nd in
+	0) echo "Freezing to the default (/freeze) directory." ;;
+	1) echo "Freezing to the directory '$dir1' (probability=$weight1)" ;;
+	*) echo Freezing to the following directories:
+	   i=1
+	   while [ $i -le $nd ]
+	   do
+		eval echo \\"	" $i. \$dir$i "\(probability=\$weight$i\)"
+		i=`expr $i + 1`
+	   done ;;
+esac
+case $nd in 0) echo "To define a freezing directory, type its path-name (starting with '/')." ;;
+	1) echo "To add another freezing directory, type its path-name (starting with '/')."
+	   echo "To stop freezing in '$dir1', type '-1'." ;;
+	??*) echo To modify the probability of an existing directory, type its path-name.
+	   echo "To stop freezing in a particular directory, type '-{index}' (eg. '-$nd')."
+		;;
+	*) echo To add another freezing directory, or to modify the probability
+	   echo "of an existing directory, type its path-name (starting with '/')."
+	   echo "To stop freezing to a particular directory, type '-{index}' (eg. '-$nd')."
+		;;
+esac
+case "$user" in root|0) : ;;
+	[1-9]*) echo
+	   echo "Freezing is performed with privliliges of UID=$user." ;;
+	*) echo
+	   echo "Freezing is performed with priviliges of user '$user'." ;;
+esac
+echo "To perform freezing under different user-privileges, type 'u'."
+echo
+echo "For help, type 'h'.  To save and exit, type 'q'.  To discard changes, type 'Q'."
+echo
+echo -n "Option :- "
+read opt more
+case "$more" in ?) echo Improper option ; continue ;; esac
+case "$opt" in
+	*[#\<\>\&\\\;]*) echo Improper option ; continue ;;
+	[hH]*) echo
+	echo Top-level help:
+	echo ---------------
+	echo To modify freezing parameters, type '1'.
+	echo "(further help about freezing parameters is available once you type '1')"
+	echo
+	echo "You can specify one or more directories (typically mount-points of"
+	echo "dedicated disk-partitions) where frozen memory-images will be placed."
+	echo When no directories are specified, all images are placed in the
+	echo '"/freeze" directory (if "/freeze" exists, otherwise freezing fails).'
+	echo
+	echo When you have two or more such directories, you can specify relative
+	echo probabilities for freezing in each directory. This enhances the performance
+	echo "by freezing in parallel to several disks when cluster(s) are disconnecting"
+	echo and many processes need to migrate back home simultaneously.
+	echo
+	echo Normally the files needed to save the memory-images of frozen processes
+	echo 'are created and written with "root" (Super-User) privileges, but an'
+	echo "advanced option allows such files to be created with another user's"
+	echo "privileges: this is needed for example, when the freezing directory(s)"
+	echo 'are NFS mounted with "root" access denied.'
+	echo
+	echo -n "Press <Enter> to continue..."
+	read anything
+	;;
+	-[fF]) nc=0 ;;
+	-[1-9]*)
+		del=`expr $opt : "-\(.*\)"`
+		isint $del || { echo Invalid option ; continue; }
+		[ $del -gt $nd ] && continue
+		while [ $del -lt $nd ]
+		do
+			up=`expr $del + 1`
+			eval dir$del=\$dir$up
+			eval weight$del=\$weight$up
+			del=$up
+		done
+		nd=`expr $nd - 1`
+		;;
+	/*) echo
+	    case "$opt" in ??????????????????*)
+		    echo "Probability for freezing in '$opt'"
+		    echo -n "	" ;;
+		    *) echo -n "Probability for freezing in '$opt' " ;;
+	    esac
+	    echo -n "(default=1.0) :- "
+	    read weight
+	    case "$weight" in "") weight=1.0 ;;
+		*) isreal "$weight" || {
+			echo Improper probability.
+			continue
+		   } ;;
+	    esac
+	    i=1
+	    while [ $i -le $nd ]
+	    do
+		eval dir=\$dir$i
+		if [ "$opt" = "$dir" ]
+		then
+			eval weight$i=$weight
+			continue 2
+		fi
+		i=`expr $i + 1`
+	    done
+	    [ $nd -ge 10 ] && {
+		echo Too many directories.
+		continue
+	    }
+	    nd=`expr $nd + 1`
+	    eval dir$nd=$opt
+	    eval weight$nd=$weight
+	    ;;
+	[uU]*) echo
+		echo Please specify a user-name or UID under whose privilege
+		echo -n "freeze images are to be created (currently $user) :- "
+		read u more
+		case "$more" in ?) echo Improprt user-name. ; continue ;; esac
+		case "$u" in *#*) continue ;;
+		[a-zA-z0-9]*) user=$u ;; esac
+		;;
+	1|f|F) if [ $nc = 0 ]
+	   then
+		unit=0
+		red=6.0
+		blue=4.0
+		mina=0.0
+		minc=-1.0
+		mink=1
+		maxp=-1
+		slice=20
+		mb=0
+	    else
+		unit=$unit1
+		red=$red1
+		blue=$blue1
+		mina=$mina1
+		minc=$minc1
+		mink=$mink1
+		maxp=$maxp1
+		slice=$slice1
+		mb=$mb1
+	    fi
+	    while :
+	    do
+		echo
+		echo Freezing policies:
+		echo ==================
+		case $unit in 0) echo a. The load in items b-d below is expressed as the number of running processes. ;;
+			*) echo a. The load in items b-d below is expressed as standard MOSIX load. ;;
+		esac
+		case $red in -*) echo b. Auto-freezing is not currently triggered by the load.
+				 echo "   Auto-unfreezing will occur when the load is below $blue." ;;
+			*) echo b. Processes are automatically frozen when the load increases above $red
+			   echo "   and unfrozen when the load decreases below $blue." ;;
+		esac
+		case $mina in 0 | 0.0)
+			echo c. All processes arriving back to their home-node due to cluster-disconnection
+			echo "   or similar circumstances, are frozen on arrival." ;;
+			-*) echo c. Processes are never automatically frozen on arrival back to their home-node. ;;
+			*) echo c. When the load is $mina or higher, all processes that arrive to their
+			   echo "   home-node due to cluster-disconnection or similar circumstances,"
+			   echo "   are frozen on arrival." ;;
+		esac
+		case $minc in 0 | 0.0)
+			echo d. All processes arriving back to their cluster due to cluster-disconnection
+			echo "   or similar circumstances, are frozen on arrival." ;;
+			-*) echo d. Processes are never automatically frozen on arrival back to their cluster. ;;
+			*) echo d. When the load is $minc or higher, all processes that arrive to their
+			   echo "   cluster due to evacuation, are frozen on arrival." ;;
+		esac
+		case $mink in 0)
+			echo e. When the load is high, all processes can be frozen. ;;
+			*) case $mink in 1) s= ;; *) s=es ;; esac
+			   echo e. Even when the load is high, at least $mink process$s
+			   echo "   must be left unfrozen at any time." ;;
+		esac
+		case $maxp in -*)
+			echo f. There is no upper limit on the number of processes
+			echo "   that may run at any time without being frozen." ;;
+			*) echo f. The maximum number of processes that may run at any time
+			   echo "   without being frozen, is $maxp." ;;
+		esac
+		case $slice in 1) s= ;; *) s=s ;; esac
+		echo g. When some processes are frozen and others are not, each process
+		echo "   runs for $slice minute$s before being replaced by a frozen process."
+		case $mb in 0)
+			echo h. When there is insufficient disk-space to freeze a process, it is killed. ;;
+			*) echo h. When there is insufficient disk-space to freeze a process
+			   echo "   that requires $mb""MB or more of memory, it is killed"
+			   echo "   (but smaller processes remain alive in main-memory)."
+		esac
+		echo
+		echo "Type <a>-<h> to modify a policy."
+		echo "Type <ha>-<hh> for help about a policy."
+		echo "Type 'q' to exit."
+		echo "Type 'Q' to discard any changes."
+		echo
+		echo -n "Option :- "
+		read action
+		case "$action" in
+		[aA]) case $unit in 0) unit=1 ;; *) unit=0 ;; esac ;;
+		[bB]) echo
+		      echo -n "Above what load to freeze ('-' if never) :- "
+		      read r
+		      case "$r" in "") continue ;;
+			-*) r=-1 ;;
+			0*|.*) echo "Too low!" ; continue ;;
+			      *) isreal "$r" || {
+					echo Improper value.
+					continue
+			      } ;;
+		      esac
+		      echo -n "Below what load to unfreeze :- "
+		      read b
+		      isreal "$b" || {
+				echo Improper value.
+				continue
+		      }
+		      case $r in -1) red=-1 ; blue=$b ; continue ;; esac
+		      case `echo $r $b |awk '{print $1 - $2}'` in
+			-*|0) echo "Unfreezing load must be below the freezing load!" ;;
+			0*|.*|*e-*) echo
+			echo Those two values are too close.  It is recommended that the
+			echo -n "difference between them is at least 1.0 : do you insist [y/N]? "
+			read yesno
+			case "$yesno" in [yY]*) red=$r ; blue=$b ;; esac ;;
+			*) red=$r ; blue=$b ;;
+		      esac ;;
+		[cC]) echo
+		      echo When should processes that arrive back to their home-node due to
+		      echo cluster-disconnection or similar circumstances be frozen on arrival
+		      echo -n "(<A>lways ; <N>ever ; or above a specified load) :- "
+		      read a
+		      case "$a" in [aAyY]*) mina=0 ;;
+			[nN]*) mina=-1 ;;
+			"") : ;;
+			*) if isreal "$a"
+				 then
+					mina=$a
+				 else
+					echo Improper value.
+				 fi ;;
+		      esac ;;
+		[dD]) echo
+		      echo When should processes that arrive back to their cluster due to
+		      echo cluster-disconnection or similar circumstances be frozen on arrival
+		      echo -n "(<A>lways ; <N>ever ; or above a specified load) :- "
+		      read a
+		      case "$a" in [aAyY]*) minc=0 ;;
+			[nN]*) minc=-1 ;;
+			"") : ;;
+			*) if isreal "$a"
+				 then
+					minc=$a
+				 else
+					echo Improper value.
+				 fi ;;
+		      esac ;;
+		[eE]) echo
+			echo Should a minimum number of processes be kept unfrozen even when the load
+			echo -n "is very high?  if so, how many ?- "
+			read m
+			case "$m" in [nN]*) mink=0 ;;
+				[yY]*) echo You should specify a number. ;;
+				"") : ;;
+				*) if isint "$m"
+				   then
+					mink=$m
+				   else
+					echo Improper value.
+				   fi ;;
+			esac ;;
+		[fF]) echo
+			echo Should there be an upper limit on the number of processes that are allowed
+			echo "to run at any time without being frozen?"
+			echo -n "if so, how many ?- "
+			read m
+			case "$m" in [nN]*) maxp=-1 ;;
+				[yY]*) echo You should specify a number. ;;
+				"") : ;;
+				*) if isint "$m"
+				   then
+					maxp=$m
+				   else
+					echo Improper value.
+				   fi ;;
+			esac ;;
+		[gG]) echo
+			echo How many minutes should a process be allowed to run
+			echo -n "when other processes are frozen :- "
+			read m other
+			case "$m" in "") : ;;
+				0) echo Please specify a positive number of minutes ;;
+				*) if isint "$m"
+				   then
+					slice=$m
+				   else
+					echo Improper value.
+				   fi ;;
+			esac ;;
+		[hH]) echo
+			echo When there is insufficient disk-space to freeze a process, it is usually
+			echo "killed.  You can save small processes by specifying a threshold, so that"
+			echo smaller processes with memory below this threshold survive in main-memory.
+			echo -n "Please enter this threshold in MegaBytes (0=always-kill) :- "
+			read t other
+			case "$t" in "") : ;;
+				*) if isint "$t"
+				   then
+					mb=$t
+				   else
+					echo Improper value
+				   fi ;;
+			esac ;;
+		[hH][aA]) echo
+			echo The load of a node can be specified in two ways:
+			echo 1. As the average number of running processes.
+			echo 2. As the standard MOSIX load, which takes into account the speed
+			echo "   and the number of CPUs of the node, so that one running process"
+			echo "   produces 0.5 load-units on a 3GHz Intel Core 2 Duo E6850 (with two CPUs)."
+			echo "   The faster and more CPUs, the less the standard MOSIX load."
+			echo
+			echo The number of running processes is easier to understand and use,
+			echo but if you have computers of different speeds and/or different
+			echo number of CPUs in your cluster, then you will probably want to
+			echo configure different load values for different nodes in options
+			echo "'b', 'c' and 'd', which would require the inconvenience of separate"
+			echo configurations for different nodes.
+			echo
+			echo For example, you may want to freeze one process when the average
+			echo number of running processes on a single-CPU reaches 1.9, but on a
+			echo dual-CPU, 1.9 processes means that the node is still under-utilized
+			echo so you definitely do not want to freeze processes there.  Using the
+			echo standard MOSIX load is a bit more complicated, but can solve this problem.
+			echo
+			echo -n "Press <Enter> to continue..."
+			read anything ;;
+		[hH][bB]) echo
+			echo Processes can be automatically frozen when the load reaches a High Threshold
+			echo "(HT): this allows the remaining processes to use the memory effectively"
+			echo instead of filling it up and having to repeatedly wait for swap-pages
+			echo "(or evan be killed when there is no sufficient swap-space).  Once the"
+			echo "load decereases below a Low Threshold (LT), these processes are unfrozen"
+			echo and can continue to run.
+			echo
+			echo When selecting the HT and the LT values, you want to make sure that all the
+			echo CPUs of your nodes will always remain utilized, but at the same time, that
+			echo there is sufficient main-memory for all the processes that run on each node.
+			echo
+			echo The difference between the HT and the LT must be sufficiently large
+			echo to prevent oscillations: the risk is that as the load decreases below
+			echo LT, a process is unfrozen - but then that process increases the load
+			echo above the HT, which causes another process to be frozen, etc.
+			echo In such cases, most of the time the system will be busy writing the
+			echo memory-contents of processes to and from the disk instead of performing
+			echo useful work.  The difference between the HT and the LT values should
+			echo therefore be at least slightly over one process - preferably more.
+			echo
+			echo -n "Press <Enter> to continue..."
+			read anything ;;
+		[hH][cC]) echo
+			echo When clusters in the multi-cluster private cloud are disconnecting from each
+			echo other, many processes that were running on the disconnecting clusters may need
+			echo "to migrate back at once, often to their home-node, and they must do it fast"
+			echo "(the system-administrator of the other clusters could be waiting to reboot"
+			echo "them and should not wait too long if guest processes do not leave quickly)."
+			echo The fact that many processes arrive simultaneously can create extreme demands
+			echo "on the memory (and CPU) of the home-node and make arrivals be even slower."
+			echo
+			echo The solution is to freeze the arriving processes, so their memory-image
+			echo arrives directly to the disk instead of to the main memory.
+			echo
+			echo This option is recommended, especially in large multi-cluster private clouds.
+			echo
+			echo Another option is to freeze arriving processes only when the load is above
+			echo "a given threshold: this option is recommended when clusters are disconnected"
+			echo gradually, node by node, but if whole clusters are disconnected from the
+			echo private cloud within a few seconds, the load will not increase
+			echo fast enough to activate this option.
+			echo
+			echo For this feature to be activated, the clusters need not be actually
+			echo disconnecting: it could also be that other clusters are receiving
+			echo processes from higher-priority clusters in the multi-cluster private cloud,
+			echo and therefore send our processes back home
+			echo "(in this case, using the threshold option works better)."
+			echo
+			echo -n "Press <Enter> to continue..."
+			read anything ;;
+		[hH][dD]) echo
+			echo When clusters in the multi-cluster private cloud are disconnecting from
+			echo each other, many processes that were running on the disconnecting clusters
+			echo may need to migrate back at once to their home-cluster.
+			echo Sometimes, especially when the local cluster is small and the multi-cluster
+			echo private cloud is large, the local cluster cannot take the influx of many
+			echo arriving processes at once.
+			echo
+			echo The solution is to freeze the arriving processes, so their
+			echo "memory-image arrives directly to the disk (on the home-node)"
+			echo instead of to the cluster.
+			echo
+			echo Another option is to freeze these processes only when the load
+			echo "(on the home-node) is above a given threshold."
+			echo
+			echo -n "Press <Enter> to continue..."
+			read anything ;;
+		[hH][eE]) echo
+			echo Sometimes it is desirable to keep a minimum number of processes running even
+			echo when the load is high: processes will be frozen only if there are more of
+			echo them running.  This assures that the processes will collectively progress
+			echo under all circumstances.
+			echo
+			echo -n "Press <Enter> to continue..."
+			read anything ;;
+		[hH][fF]) echo
+			echo If you want to limit the number of processes that run at any given time,
+			echo you can use the automatic-freezing feature to freeze excess processes.
+			echo
+			echo -n "Press <Enter> to continue..."
+			read anything ;;
+		[hH][gG]) echo
+			echo When some processes are running in their home-node and others are frozen
+			echo "(not including processes that were frozen manually), the automatic-freezing"
+			echo system lets each running process run for a certain number of minutes,
+			echo then it freezes it and unfreezes one of the frozen processes instead.
+			echo You can select the number of minutes.
+			echo
+			echo -n "Press <Enter> to continue..."
+			read anything ;;
+		[hH][hH]) echo
+			echo When there is insufficient disk-space to freeze a process, it is usually
+			echo killed.  This is in order to prevent a large number of big processes from
+			echo filling up the memory and swap-space beyond their capacity.  You have the
+			echo option to instead allow small processes that failed to freeze to stay in
+			echo "memory (such processes will still be frozen, except that their memory-image"
+			echo "is stored in main-memory and/or in the swap-space)."
+			echo
+			echo You can select a size in MegaBytes, so that only processes of that size
+			echo "or bigger are killed.  Selecting '0' means that all such processes are killed."
+			echo
+			echo -n "Press <Enter> to continue..."
+			read anything ;;
+		q*) nc=1
+			unit1=$unit
+			red1=$red
+			blue1=$blue
+			mina1=$mina
+			minc1=$minc
+			mink1=$mink
+			maxp1=$maxp
+			slice1=$slice
+			mb1=$mb
+		    break ;;
+		Q*) break ;;
+	        esac
+	    done
+	    ;;
+	q*) > /tmp/.tfr$$
+	    case $nc in 1)
+		echo 1 $unit1 $red1 $blue1 $mina1 $minc1 $mink1 $maxp1 $slice1 $mb1 >>/tmp/.tfr$$ ;;
+	    esac
+	    j=1
+	    while [ $j -le $nd ]
+	    do
+		eval echo \$dir$j \$weight$j ">>/tmp/.tfr$$"
+		j=`expr $j + 1`
+	    done
+	    case $user in root | 0) : ;; *) echo U $user >> /tmp/.tfr$$ ;; esac
+	    mos_checkconf -f /tmp/.tfr$$ 2>/tmp/.err$$ || {
+		echo A problem was detected:
+		sed -e "s/.tfr$$: //" -e "s/^/*** /" -e "s/$/ ***/" < /tmp/.err$$
+		echo
+		echo -n "Press <Enter> to continue and correct it..."
+		read something
+		continue
+	    }
+		break ;;
+	Q*) exit 0 ;;
+esac
+done
+echo
+if cat /tmp/.tfr$$ > $ROOT/etc/mosix/freeze.conf
+then
+	echo Configuration saved.
+else
+	echo Sorry, failed writing your changes to $ROOT/etc/mosix/freeze.conf
+fi
+exit 0

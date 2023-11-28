@@ -1,0 +1,83 @@
+.\" copyright (c) 2005 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds document-title MOSMIGRATE
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOSMIGRATE
+- Manual control of running MOSIX processes
+.Sh SYNOPSIS
+.Nm \&mosmigrate {pid} {node-number|IP-address|host}
+.Nm \&mosmigrate {pid} home
+.Nm \&mosmigrate {pid} out
+.Nm \&mosmigrate {pid} freeze
+.Nm \&mosmigrate {pid} continue
+.Nm \&mosmigrate {pid} checkpoint
+.Nm \&mosmigrate {pid} chkstop
+.Nm \&mosmigrate {pid} chkexit
+.Sh DESCRIPTION
+.Pa Mosmigrate {pid}
+manually migrates or otherwise instructs a given MOSIX process
+.Pa  ( pid )
+to perform an action.
+Note that
+.Pa mosmigrate
+does not wait to ensure that the process in question indeed performed
+the requested action.
+.Pp
+The first option,
+.Pa {node-number|IP-address|host} ,
+specifies a target node to which the process should migrate.
+.Pp
+The
+.Pa home
+option forces the process to migrate back to its home-node.
+.Pp
+The
+.Pa out
+option forces a guest process to move out of this node (this option is
+available only to the Super-User).
+.Pp
+The
+.Pa freeze
+option freezes the process (guest processes may not be frozen).
+.Pp
+The
+.Pa continue
+option unfreezes the process.
+.Pp
+The
+.Pa checkpoint
+option requests the process to take a checkpoint.
+.Pp
+The
+.Pa chkstop
+option requests the process to take a checkpoint and stop
+(the process may then be resumed with SIGCONT).
+.Pp
+The
+.Pa chkexit
+option requests the process to take a checkpoint and exit.
+.Pp
+Except for the Super-User, one can normally migrate or affect
+only their own processes.  The rule is: if you can kill it,
+then you are also allowed to migrate/affect it.
+.Pp
+The best way to locate and find the
+.Pa PID
+of a MOSIX processes is by using
+.Pa mosps(1) .
+.Sh SEE ALSO
+.Xr mosrun 1 ,
+.Xr mosps 1 ,
+.Xr mosix 7 .

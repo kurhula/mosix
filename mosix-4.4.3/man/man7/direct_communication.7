@@ -1,0 +1,620 @@
+.\" copyright (c) 2007 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M7
+.ds operating-system MOSIX
+.ds volume MOSIX Description
+.ds date-string Janury 2014
+.ds document-title DIRECT COMMUNICATION
+.Sh NAME
+.Nm \&DIRECT COMMUNICATION
+.Nd migratable sockets between MOSIX processes
+.Sh PURPOSE
+Normally, migratable/MOSIX processes do all their I/O (and most system-calls)
+via their home-node: this can be slow because operations are limited
+by the network speed and latency.
+.Pa Direct communication
+allows processes to pass messages directly between them, bypassing their
+home-nodes.
+.Pp
+For example, if process X whose home-node is A and
+runs on node B wishes to send a message over a socket to process Y whose
+home-node is C and runs on node D, then the message has to pass over
+the network from B to A to C to D.  Using
+.Pa direct communication ,
+the message will pass directly from B to D.
+Moreover, if X and Y run on the same node, the network is not used
+at all.
+.Pp
+To facilitate
+.Pa direct communication ,
+each MOSIX process (running under
+.Pa mosrun(1) )
+can own a "mailbox".
+This mailbox can contain at any time up to 10000 unread
+messages of up to a total of 32MB.
+MOSIX Processes can send messages to mailboxes of other
+processes anywhere within the multi-cluster (that are willing to accept them).
+.Pp
+.Pa Direct communication
+makes the location of processes transparent, so the senders do not
+need to know where the receivers run, but only to identify them by their
+home-node and process-ID (PID) in their home-node.
+.Pp
+.Pa Direct communication
+guarantees that the order of messages per receiver is preserved, even when
+the sender(s) and receiver migrate - no matter where to and how many times
+they migrate.
+.Sh SENDING MESSAGES
+To start sending messages to another process, use:
+.sp
+.in +6
+.Pa them = open("/proc/mosix/mbox/{a.b.c.d}/{pid}", 1);
+.in -6
+.sp
+where
+.Pa {a.b.c.d}
+is the IP address of the receiver's home-node and
+.Pa {pid}
+is the process-ID of the receiver.
+To send messages to a process with the same home-node,
+you can use
+.Pa 0.0.0.0
+instead of the local IP address (this is even preferable,
+because it allows the communication to proceed in the rare
+event when the home-node is shut-down from its cluster).
+.Pp
+The returned value
+.Pa ( them )
+is not a standard (POSIX) file-descriptor:
+it can only be used within the following system calls:
+.sp
+.in +6
+.Pa w = write(them, message, length);
+.br
+.Pa fcntl(them, F_SETFL, O_NONBLOCK);
+.br
+.Pa fcntl(them, F_SETFL, 0);
+.br
+.Pa dup2(them, 1);
+.br
+.Pa dup2(them, 2);
+.br
+.Pa close(them);
+.in -6
+.Pp
+Zero-length messages are allowed.
+.Pp
+Each process may at any time have up to 128 open
+.Pa direct communication
+file-descriptors for sending messages to other processes.
+These file-descriptors are inherited by child processes (after
+.Pa fork(2) ) .
+.Pp 
+When
+.Pa dup2
+is used as above, the corresponding file-descriptor
+(1 for standard-output; 2 for standard-error) 
+is associated with sending messages to the same process as
+.Pa them .
+In that case, only the above calls
+.Pa ( write , fcntl , close ,
+but not
+.Pa dup2 )
+can then be used with that descriptor.
+.\"The following is still under testing:
+.\".Pp
+.\"The above method is reliable, with no message ever lost (as in the
+.\".Pa TCP(7)
+.\"protocol).
+.\"If speed is more important than reliability and the application can
+.\"tolerate the loss of a message here and there (as in the
+.\".Pa UDP(7)
+.\"protocol), then use instead:
+.\".sp
+.\".in +6
+.\".Pa them = open("/proc/mosix/ubox/{a.b.c.d}/{pid}", 1);
+.\".in -6
+.\".sp
+.\".Pa ( 'mbox'
+.\"is replaced with
+.\".Pa 'ubox' ) .
+.\"This option uses UDP where possible, so it has no benefit when
+.\"sending messages that are longer than what UDP can handle (usually slightly
+.\"under 64K).
+.Sh RECEIVING MESSAGES
+To start receiving messages, create a mailbox:
+.in +6
+.Pa my_mbox = open("/proc/mosix/mybox", O_CREAT, flags);
+.in -6
+where
+.Pa flags
+is any combination (bitwise OR) of the following:
+.sp
+.Bl -tag -width abc -compact
+.It 1
+Allow receiving messages from other users of the same group (GID).
+.It 2
+Allow receiving messages from all other users.
+.It 4
+Allow receiving messages from processes with other home-nodes.
+.It 8
+Do not delay: normally when attempting to receive a message and no
+fitting message was received, the call blocks until either a message
+or a signal arrives, but with this flag, the call returns immediately
+a value of -1 (with
+.Pa errno
+set to EAGAIN).
+.It 16
+Receive a
+.Pa SIGIO
+signal (See
+.Pa signal(7) )
+when a message is ready to be read (for assynchroneous operation).
+.It 32
+Normally, when attempting to read and the next message does not fit in
+the read buffer (the message length is bigger than the
+.Pa count
+parameter of the
+.Pa read(2)
+system-call), the next message is truncated.
+When this bit is set, the first message that fits the read-buffer
+will be read (even if out of order):
+if none of the pending messages fits the buffer, the receiving process
+either waits for a new message that fits the buffer to arrive, or if
+bit 8 ("do not delay") is also set, returns -1 with
+.Pa errno
+set to EAGAIN.
+.It 64
+Treat zero-length messages as an end-of-file condition: once a zero-length
+message is read, all further reads will return 0 (pending and future messages
+are not deleted, so they can still be read once this flag is cleared).
+.El
+.Pp
+The returned value
+.Pa ( my_mbox )
+is not a standard (POSIX) file-descriptor:
+it can only be used within the following system calls:
+.sp
+.in +6
+.Pa r = read(my_mbox, buf, count);
+.br
+.Pa r = readv(my_mbox, iov, niov);
+.br
+.Pa dup2(my_mbox, 0);
+.br
+.Pa close(my_mbox);
+.br
+.Pa ioctl(my_mbox, SIOCINTERESTED, addr);
+.br
+.Pa ioctl(my_mbox, SIOCSTOREINTERESTS, addr);
+.br
+.Pa ioctl(my_mbox, SIOCWHICH, addr);
+.br
+(see FILTERING below)
+.in -6
+.Pp
+Reading
+.Pa my_mbox
+always reads a single message at a time, even when
+.Pa count
+allows reading more messages.  A message can have zero-length, but
+.Pa count
+cannot be zero.
+.Pp
+A
+.Pa count 
+of -1 is a special request to test for a message without actually reading it.
+If a message is present for reading,
+.Pa read(my_mbox, buf, -1)
+returns its length - otherwise it returns -1 with
+.Pa errno
+set to
+.Pa EAGAIN .
+.Pp
+unlike in "SENDING MESSAGES" above,
+.Pa my_mbox
+is NOT inherited by child processes.
+.Pp
+When
+.Pa dup2
+is used as above, file-descriptor 0 (standard-input) is associated
+with receiving messages from other processes, but only the
+.Pa read , readv
+and
+.Pa close
+system-calls can then be used with file-descriptor 0.
+.Pp
+Closing
+.Pa my_mbox
+(or
+.Pa close(0)
+if
+.Pa dup2(my_mbox, 0)
+was used - whichever is closed last)
+discards all pending messages.
+.Pp
+To change the
+.Pa flags
+of the mailbox without losing any pending messages, open it again
+(without using
+.Pa close ) :
+.sp
+.in +6
+.Pa my_mbox = open("/proc/mosix/mybox", O_CREAT, new_flags);
+.in -6
+.sp
+Note that when removing permission-flags (1, 2 and 4) from
+.Pa new_flags ,
+messages that were already sent earlier will still arrive, even from senders
+that are no longer allowed to send messages to the current process.
+Re-opening always returns the same value
+.Pa ( my_mbox )
+as the initial
+.Pa open
+(unless an error occurs and -1 is returned).  Also note that if
+.Pa dup2(my_mbox, 0)
+was used,
+.Pa new_flags
+will immediately apply to file-descriptor 0 as well.
+.Pp
+Extra information is available about the latest message that was read
+(including when the
+.Pa count
+parameter of the last
+.Pa read()
+was -1 and no reading actually took place).
+To get this information, you should first define the following macro:
+.in +6
+.Pa static inline unsigned int GET_IP(char *file_name)
+.br
+.Pa {
+.in +6
+.Pa int ip = open(file_name, 0);
+.br
+.Pa return((unsigned int)((ip==-1 && errno>255)\ ? -errno : ip));
+.in -6
+.Pa }
+.in -6
+.sp
+To find the IP address of the sender's home, use:
+.in +6
+.Pa sender_home = GET_IP("/proc/self/sender_home");
+.in -6
+.sp
+To find the process-ID (PID) of the sender, use:
+.in +6
+.Pa sender_pid = open("/proc/self/sender_pid", 0);
+.in -6
+.sp
+To find the IP address of the node where the sender was running when
+the message was sent, use:
+.in +6
+.Pa sender_location = GET_IP("/proc/self/sender_location");
+.in -6
+(this can be used, for example, to request a manual migration
+to bring together communicating processes to the same node)
+.sp
+To find the length of the last message, use:
+.in +6
+.Pa bytes = open("/proc/self/message_length", 0);
+.in -6
+(this makes it possible to detect truncated messages: if the last message
+was truncated,
+.Pa bytes
+will contain the original length)
+.Sh FILTERING
+The following facility allows the receiver to select which types of
+messages it is interested to receive:
+.sp
+struct interested
+.br
+{
+.br
+	unsigned char conditions; /* bitmap of conditions */
+.br
+	unsigned char testlen;	/* length of test-pattern (1-8 bytes) */
+.br
+	int pid;		/* Process-ID of sender */
+.br
+	unsigned int home;	/* home-node of sender (0 = same home) */
+.br
+	int minlen;		/* minimum message length */
+.br
+	int maxlen;		/* maximum message length */
+.br
+	int testoffset;	/* offset of test-pattern within message */
+.br
+	unsigned char testdata[8]; /* expected test-pattern */
+.br
+	int msgno;		/* pick a specific message (starting from 1) */
+.br
+	int msgoffset;		/* start reading from given offset */
+.br
+};
+.sp
+/* conditions: */
+.br
+#define INTERESTED_IN_PID	1
+.br
+#define INTERESTED_IN_HOME	2
+.br
+#define INTERESTED_IN_MINLEN	4
+.br
+#define INTERESTED_IN_MAXLEN	8
+.br
+#define INTERESTED_IN_PATTERN	16
+.br
+#define INTERESTED_IN_MESSAGENO	32
+.br
+#define INTERESTED_IN_OFFSET	64
+.br
+#define PREVENT_REMOVAL		128
+.sp
+struct interested filter;
+.sp
+struct interests
+.br
+{
+.br
+	long number;			/* number of filters */
+.br
+	struct interested *filters;	/* filters to store */
+.br
+} filters;
+.sp
+#define SIOCINTERESTED	0x8985
+.br
+#define SIOCKSTOREINTERESTS 0x8986
+.br
+#define SIOCWHICH 0x8987
+.sp
+A call to:
+.in +5
+.Pa ioctl(my_mbox, SIOCINTERESTED, &filter);
+.in -5
+starts applying the given
+.Pa filter ,
+while a call to:
+.in +5
+.Pa ioctl(my_mbox, SIOCINTERESTED, NULL);
+.in -5
+cancels the filtering.  Closing
+.Pa my_mbox
+also cancels the filtering (but re-opening with different flags does not
+cancel the filtering).
+.Pp
+Calls to this
+.Pa ioctl
+return the address of the previous filter.
+.Pp
+When filtering is applied, only messages that comply with the filter are
+received: if there are no complying messages, the receiving process either
+waits for a complying message to arrive, or if bit 8 ("do not delay") of the
+.Pa flags
+from
+.Pa open("/proc/self/mybox", O_CREAT, flags)
+is set,
+.Pa read(my_mbox,...)
+and
+.Pa readv(my_mbox,...)
+return -1 with
+.Pa errno
+set to EAGAIN.  Filtering can also be used to test for particular messages
+using
+.Pa read(my_mbox, buf, -1) .
+.Pp
+Different types of messages can be received simply by modifying the contents
+of the
+.Pa filter
+between calls to
+.Pa read(my_mbox,...)
+(or
+.Pa readv(my_mbox,...) ) .
+.Pp
+.Pa filter.conditions
+is a bit-map indicating which condition(s) to consider:
+.Pp
+When
+.Pa INTERESTED_IN_PID
+is set, the process-ID of the sender must match
+.Pa filter.pid .
+.Pp
+When
+.Pa INTERESTED_IN_HOME
+is set, the home-node of the sender must match
+.Pa filter.home
+(a value of 0 can be used to match senders from the same home-node).
+.Pp
+When
+.Pa INTERESTED_IN_MINLEN
+is set, the message length must be at least
+.Pa filter.minlen
+bytes long.
+.Pp
+When
+.Pa INTERESTED_IN_MAXLEN
+is set, the message length must be no longer than
+.Pa filter.maxlen
+bytes.
+.Pp
+When
+.Pa INTERESTED_IN_PATTERN
+is set, the message must contain a given pattern of data at a given offset.
+The offset within the message is given by
+.Pa filter.testoffset ,
+the pattern's length (1 to 8 bytes) in
+.Pa filter.testlen
+and its expected contents in
+.Pa filter.testdata .
+.Pp
+When
+.Pa INTERESTED_IN_MESSAGENO
+is set, the message numbered
+.Pa filter.msgno
+(numbering starts from 1) will be read out of the queue of received messages.
+.Pp
+When
+.Pa INTERESTED_IN_OFFSET
+is set, reading begins at the offset
+.Pa filter.msgoffset
+of the message's data.
+.Pp
+When
+.Pa PREVENT_REMOVAL
+is set, read messages are not removed from the message-queue, so they can
+be re-read until this flag is cleared.
+.Pp
+A call to:
+.in +5
+.Pa ioctl(my_mbox, SIOCSTOREINTERESTS, &filters);
+.in -5
+stores an array of filters for later use by MOSIX:
+.Pa filters.number
+should contain the number of filters (0-1024) and 
+.Pa filters.filters
+should point to an array of filters
+(in which the conditions
+.Pa INTERESTED_IN_MESSAGENO, INTERESTED_IN_OFFSET
+and
+.Pa PREVENT_REMOVAL
+are ignored).
+.br
+Successful calls return 0.
+.Pp
+Closing
+.Pa my_mbox
+also discards the stored filters (but re-opening with different flags does not).
+.Pp
+A call to:
+.in +5
+.Pa ioctl(my_mbox, SIOCWHICH, &bitmap)
+.in -5
+fills the given bitmap with information, one bit per filter, about whether (1)
+or not (0) there are any pending messages that match the filters that were
+previously stored by
+.Pa SIOCSTOREINTERESTS
+(above).
+.sp
+The number of bytes affected in
+.Pa bitmap
+depends on the number of stored filters.  If unsure, reserve the maximum
+of 128 bytes (for 1024 filters).
+.br
+Successful calls return the number of filters previously stored by
+.Pa SIOCSTOREINTERESTS .
+.Sh ERRORS
+.Pa Sender errors:
+.Bl -tag -width abcdef
+.It ENOENT
+Invalid pathname in
+.Pa open :
+the specified IP address is not part of this cluster/multi-cluster,
+or the process-ID is out of range (must be 2-32767).
+.It ESRCH
+No such process (this error is detected only when attempting to send
+- not when opening the connection).
+.It EACCES
+No permission to send to that process.
+.It ENOSPC
+Non-blocking (O_NONBLOCK) was requested and
+the receiver has no more space to accept this message - perhaps try again later.
+.It ECONNABORTED
+The home-node of the receiver is no longer in our multi-cluster.
+.It EMFILE
+The maximum of 128
+.Pa direct communicaiton
+file-descriptors is already in use.
+.It EINVAL
+When opening, the second parameter does not contain the bit "1";
+When writing, the length is negative or more than 32MB.
+.It ETIMEDOUT
+Failed to establish connection with the mail-box managing daemon
+.Pa ( mospostald ) .
+.It ECONNREFUSED
+The mail-box managing
+.Pa ( mospostald )
+refused to serve the call (probably a MOSIX installation error).
+.It EIO
+Communication breakdown with the mail-box managing daemon
+.Pa ( mospostald ) .
+.El
+.Pp
+.Pa Receiver errors:
+.Bl -tag -width abcdef
+.It EAGAIN
+No message is currently available for reading and the "Do not delay"
+flag is set (or
+.Pa count
+is -1).
+.It EINVAL
+One or more values in the filtering structure are illegal or their combination
+makes it impossible to receive any message (for example, the offset of
+the data-pattern is beyond the maximum message length).  Also, an attempt
+to store either a negative number or more than 1024 filters.
+.It ENODATA
+The
+.Pa INTERESTED_IN_MESSAGENO
+filter is used, and either "no truncating" was requested (32 in the open-flags)
+while the message does not fit the read buffer,
+or the message does not fulfil the other filtering conditions.
+.El
+.Pp
+.Pa Errors that are common to both sender and receiver:
+.Bl -tag -width abcdef
+.It EINTR
+Read/write interrupted by a signal.
+.It ENOMEM
+Insufficient memory to complete the operation.
+.It EFAULT
+Bad read/write buffer address.
+.It ENETUNREACH
+Could not establish a connection with the mail-box managing deamon
+.Pa ( mospostald ) .
+.It ECONNRESET
+Connection lost with the mail-box managing daemon
+.Pa ( mospostald ) .
+.El
+.Sh POSSIBLE APPLICATIONS
+.Pp
+The scope of
+.Pa direct communication
+is very wide: almost any program that requires communication between
+related processes can benefit.  Following are a few examples:
+.Bl -enum
+.It
+Use
+.Pa direct communication
+within standard communication packages and libraries, such as MPI.
+.It
+Pipe-like applications where one process' output is the other's input:
+write your own code or use the existing
+.Pa mospipe(1)
+MOSIX utility.
+.It
+.Pa Direct communiction
+can be used to implement fast I/O for
+migrated processes (with the cooperation of a local process on the
+node where the migrated process is running).  In particular, it can
+be used to give migrated processes access to data from a common
+NFS server without causing their home-node to become a bottleneck.
+.El
+.Sh LIMITATIONS
+Processes that are involved in direct communication (having open
+file-descriptors for either sending or receiving messages)
+cannot be checkpointed and cannot execute
+.Pa mosrun 
+recursively
+or
+.Pa mosnative
+(see
+.Pa mosrun(1) ) .
+.Sh SEE ALSO
+.Xr mosrun 1 ,
+.Xr mospipe 1 ,
+.Xr mosix 7 .

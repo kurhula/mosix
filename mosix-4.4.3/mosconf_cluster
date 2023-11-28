@@ -1,0 +1,422 @@
+#!/bin/sh -
+#
+# Copyright (c) 2001 - 2015, Amnon BARAK, all rights reserved.
+# All rights reserved.
+# MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+#
+# THIS SOFTWARE IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+# WHATSOEVER. NO LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING
+# FROM THE USE OF THIS SOFTWARE WILL BE ACCEPTED.
+
+PATH=/sbin:/usr/sbin:/usr/local/sbin:/bin:/usr/bin:/usr/local/bin
+trap 'rm -f /tmp/.tcl$$ /tmp/.err$$' EXIT
+n=0
+na=0
+ad=n
+changed=n
+major_change=n
+
+suggest_userview() {
+	b=1
+	i=1
+	while [ $i -le $n ]
+	do
+		eval first=\$ips$i
+		eval nx=\$nn$i
+		if [ `expr $b + $nx` -gt 65536 ]
+		then
+			echo $b $first `expr 65536 - $b`
+			break
+		else
+			echo $b $first $nx
+			b=`expr $b + $nx`
+			i=`expr $i + 1`
+		fi
+	done
+}
+
+valid_ip() {
+	case $1 in *.*.*.*.*.* | 0.0.* | 255.255.255.*) return 1 ;;
+		[0-9]*.[0-9]*.[0-9]*.[0-9]*) : ;;
+		*) return 1 ;;
+	esac
+	set - `echo "$1" | sed "s/\./ /g"`
+	for chk in $1 $2 $3 $4
+	do
+		case "$chk" in [0-9] | [1-9][0-9] | 1[0-9][0-9] | 2[0-4][0-9] | 25[0-5]) : ;; *) return 1 ;;
+		esac
+	done
+	return 0
+}
+
+read_nodes() {
+	while read host num flags
+	do
+		case "$host" in "" | *"#"* | 0.0.* | 255.255.255.* |\
+			*.*.*.*.*.*=* | *=*=*)
+				continue ;;
+			[0-9]*.[0-9]*.[0-9]*.[0-9]*=*)
+				set - `echo $host | sed "s/=/ /"`
+				valid_ip $1 || continue
+				na=`expr $na + 1`
+				eval aa$na=$1
+				eval at$na=$2
+				ad=y
+				continue
+				;;
+		esac
+		case "$num" in [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | \
+			[1-9][0-9][0-9][0-9] | [1-2][0-9][0-9][0-9][0-9] | \
+			3[0-1][0-9][0-9][0-9] | 32[0-6][0-9][0-9] | \
+			327[0-5][0-9] |3276[0-7]) : ;; *) continue ;; esac
+		case "$flags" in *[o0-9]*) ad=y ;; esac
+		case `echo "$flags" | sed -e 's/[0-9][0-9]*//' -e s/o// -e s/p//` in ?*) flags= ;; esac
+set -
+		n=`expr $n + 1`
+		eval ips$n=$host
+		eval nn$n=$num
+		eval flags$n=$flags
+	done
+	return 0
+}
+[ -f $ROOT/etc/mosix/mosix.map ] && read_nodes < $ROOT/etc/mosix/mosix.map
+
+do_user=y
+[ -f $ROOT/etc/mosix/userview.map ] && {
+	suggest_userview > /tmp/.tcl$$
+	cmp -s /tmp/.tcl$$ $ROOT/etc/mosix/userview.map || do_user=n
+}
+
+while :
+do
+	echo
+	case "$n" in 0) echo There are no nodes in your cluster yet:
+			echo =======================================;;
+		*) echo Nodes in your cluster:
+		   echo ====================== ;;
+	esac
+	i=1
+	while [ $i -le $n ]
+	do
+		[ `expr $i % 15` = 0 ] && {
+			echo -n "Press <Enter> to continue."
+			read something
+		}
+		eval a=\$ips$i
+		eval b=\$nn$i
+		eval c=\$flags$i
+		echo -n "$i. "
+		case $b in 1) : ;; *) echo -n "$b nodes starting from " ;; esac
+		echo -n $a
+		case $c in *p*) : ;; *) echo -n " (distant)" ;; esac
+		echo
+		i=`expr $i + 1`
+	done
+	j=1
+	while [ $j -le $na ]
+	do
+		eval ato=\$at$j
+		eval aa=\$aa$j
+		[ `expr \( $n + $j \) % 15` = 0 ] && {
+			echo -n "Press <Enter> to continue."
+			read something
+		}
+		echo a$j. $ato has an alternative IP address of $aa
+		j=`expr $j + 1`
+	done
+	case $na in 0)
+		echo
+		echo Automatic configuration:
+		echo ========================
+		echo
+		echo ">>> Type 'a' to auto-detect and configure the nodes in your cluster <<<"
+		echo
+		echo Manual configuration:
+		echo =====================
+	esac
+	echo
+	echo To add a new set of nodes to your cluster, type "'n'".
+	[ $n != 0 ] && {
+	echo To modify an entry, type its number.
+	echo "To delete an entry, type 'd' followed by that entry-number (eg. d"$n\).
+	}
+	case $ad in
+		y)
+		echo "To add a new alias, type 'l'".
+		[ $na != 0 ] && echo "To delete an alias, type 'da' followed by the alias number (eg. da"$na\).
+		echo "For help, type 'h'.  When finished, type 'q' (to abandon all changes type 'Q')."
+			;;
+		n) echo To turn on advanced options, type "'+'".
+		   echo "For help, type 'h'."
+		   echo "To save and exit, type 'q'.  (to abandon all changes and exit, type 'Q')"
+			;;
+	esac
+	echo
+	echo -n "Option :- "
+	read opt
+	case "$opt" in
+		[1-9]|[1-9][0-9]|[1-9][0-9][0-9])
+		[ $opt -gt $n ] && continue
+		echo
+		echo "Modifying entry #$opt:"
+		echo
+		eval prev=\$ips$opt
+		echo -n "First host-name or IP address ($prev) :- "
+		read first
+		case "$first" in "") first=$prev ;;
+			*[\ \	\#\\]*) echo Invalid host-name. ; continue ;;
+			[a-zA-Z]*) changed=y ; major_change=y ;;
+			[0-9]*) valid_ip $first || {
+				echo Invalid IP address.
+				continue
+			}
+			changed=y
+			major_change=y ;;
+			*) echo Invalid host-name.
+			   continue ;;
+		esac
+		eval prev=\$nn$opt
+		echo -n "Number of nodes ($prev) :- "
+		read num
+		case "$num" in "") num=$prev ;;
+			[1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|\
+				[1-9][0-9][0-9][0-9][0-9])
+				[ $num -gt 32767 ] && {
+					echo Too many nodes.
+					continue
+				}
+				[ $num -lt $prev ] && major_change=y
+				changed=y ;;
+			*) echo Invalid number of nodes.
+			   continue ;;
+		esac
+		eval fl=\$flags$opt
+		case $ad in n) fl=p ;;
+			*) case $num in 1)
+				echo -n "Is this node" ;;
+				*) echo -n "Are these nodes" ;;
+			   esac
+			   case $fl in *p*) def="[y/N]";; *) def="[Y/n]";; esac
+			   echo -n " distant $def? "
+			   read yesno
+			   case "$yesno" in "") : ;;
+				[yY]*) changed=y
+					fl=`echo $fl |sed 's/p//'` ;;
+				[nN]*) changed=y
+					case $fl in *p*) :;; *) fl=p$fl;;esac;;
+				*) echo Improper reply ; continue ;;
+			   esac
+		esac
+		eval ips$opt=$first
+		eval nn$opt=$num
+		eval flags$opt=$fl
+		continue
+		;;
+		n) [ `expr $n + $na` -ge 256 ] && {
+			echo Too many entries.
+			continue
+		   }
+		
+		echo
+		echo "Adding new node(s) to the cluster:"
+		echo
+		echo -n "First host-name or IP address :- "
+		read first
+		case "$first" in "") continue ;;
+			*[\ \	\#\\]*) echo Invalid host-name. ; continue ;;
+			[a-zA-Z]*) : ;;
+			[0-9]*) valid_ip $first || {
+				echo Invalid IP address.
+				continue
+			} ;;
+			*) echo Invalid host-name.
+			   continue ;;
+		esac
+		echo -n "Number of nodes :- "
+		read num
+		case "$num" in "") continue ;;
+			[1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|\
+				[1-9][0-9][0-9][0-9][0-9])
+				[ $num -gt 32767 ] && {
+					echo Too many nodes.
+					continue
+				} ;;
+			*) echo Invalid number of nodes.
+			   continue ;;
+		esac
+		fl=p
+		case $ad in y)
+			case $num in 1)
+				echo -n "Is this node" ;;
+				*) echo -n "Are these nodes" ;;
+			esac
+			echo -n " distant [y/N]? "
+			read yesno
+			case "$yesno" in "" | [nN]*) : ;;
+				[yY]*) fl= ;;
+				*) echo Improper reply ; continue ;;
+			esac ;;
+		esac
+		n=`expr $n + 1`
+		eval ips$n=$first
+		eval nn$n=$num
+		eval flags$n=$fl
+		changed=y
+		case $n in 1) major_change=y ;; esac
+		continue
+		;;
+		d[1-9]|d[1-9][0-9]|d[1-9][0-9][0-9])
+		del=`expr $opt : "d\(.*\)"`
+		[ $del -gt $n ] && continue
+		while [ $del -lt $n ]
+		do
+			up=`expr $del + 1`
+			eval ips$del=\$ips$up
+			eval nn$del=\$nn$up
+			eval flags$del=\$flags$up
+			del=$up
+		done
+		n=`expr $n - 1`
+		changed=y
+		major_change=y
+		continue
+		;;
+		l) [ `expr $n + $na` -ge 256 ] && {
+			echo Too many entries.
+			continue
+		   }
+		echo
+		echo "Adding a new alias:"
+		echo
+		echo -n "Host name (or IP address) that has another IP address :- "
+		read host
+		case "$host" in
+			*[\ \	\#\\]*) echo Invalid host-name. ; continue ;;
+			[a-zA-Z]*) : ;;
+			[0-9]*) valid_ip $host || {
+				echo Invalid IP address.
+				continue
+			} ;;
+			*) echo Invalid host-name.
+			   continue ;;
+		esac
+		echo -n "The extra IP address of $host :- "
+		read ip
+		valid_ip "$ip" || {
+			echo Invalid Ip address.
+			continue
+		}
+		na=`expr $na + 1`
+		eval aa$na=$ip
+		eval at$na=$host
+		changed=y
+		continue
+		;;
+		da[1-9]|da[1-9][0-9]|da[1-9][0-9][0-9])
+		del=`expr $opt : "da\(.*\)"`
+		[ $del -gt $na ] && continue
+		while [ $del -lt $na ]
+		do
+			up=`expr $del + 1`
+			eval aa$del=\$aa$up
+			eval at$del=\$at$up
+			del=$up
+		done
+		na=`expr $na - 1`
+		changed=y
+		continue
+		;;
+		[aA]*)
+			case $na in 0) : ;;
+				*) echo "Warning: if you proceed with auto-detection, all your aliases will be lost!"
+				   echo -n "Proceed anyway? "
+				   read yesno
+				   case "$yesno" in [yY]*) : ;;
+					*) continue ;;
+				   esac ;;
+			esac
+			mos_autoconf && exec $0 ;;
+		[hH]*)
+		echo
+		echo "A cluster consists of one or more sets of nodes with"
+		echo consecutive IP addresses. Each set is defined by:
+		echo "1. The host-name or the IP address of the"
+		echo "   first node (lowest IP adddress) in the set."
+		echo "2. The number of nodes in the set."
+		echo
+		echo The advanced options are:
+		echo "1. The node(s) in each set can be configured as 'distant' from the node(s)"
+		echo "   which you are configuring: this usually means that the node(s) of that set"
+		echo "   are in another building or that the network leading to them is slow."
+		echo
+		echo "2. Aliases tell MOSIX that one of the nodes in the cluster or the"
+		echo "   multi-cluster has an additional IP address, so that when network-packets"
+		echo "   arrive from that address, MOSIX will recognize and accept them as coming"
+		echo "   from the configured node (rather than from some foreign computer that"
+		echo "   does not belong to the [multi-]cluster)."
+		echo
+		echo -n "Press <Enter> to continue"
+		read anything
+		continue
+		;;
+		+) ad=y ; echo Advanced options are now on. ; continue ;;
+		q*) case $changed in n) exit 0 ;; esac
+			[ $n = 0 ] && {
+				echo "Your cluster must include at least one node!"
+				echo -n "Press <Enter> to continue..."
+				read something
+				continue
+			}
+			> /tmp/.tcl$$ || {
+				echo Sorry, failed to create temporary file.
+				exit 1
+			}
+			i=1
+			while [ $i -le $n ]
+			do
+				eval echo \$ips$i \$nn$i \$flags$i ">>/tmp/.tcl$$"
+				i=`expr $i + 1`
+			done
+			j=1
+			while [ $j -le $na ]
+			do
+				eval echo \$aa$j=\$at$j ">>/tmp/.tcl$$"
+				j=`expr $j + 1`
+			done
+			case $ROOT in "") flag=C ;; *) flag=c ;; esac
+			mos_checkconf -$flag /tmp/.tcl$$ 2>/tmp/.err$$ || {
+				echo A problem was detected:
+				sed -e "s/^/*** /" -e "s/$/ ***/" < /tmp/.err$$
+				echo
+				echo -n "Press <Enter> to continue and correct it..."
+				read something
+				continue
+			}
+			break ;;
+		Q*) exit 0 ;;
+		*) continue ;;
+	esac
+done
+cat /tmp/.tcl$$ > $ROOT/etc/mosix/mosix.map || {
+	echo "Failed writing the new configuration to $ROOT/etc/mosix/mosix.map!"
+	exit 1
+}
+echo
+echo Cluster configuration was saved.
+echo
+case "$ROOT" in "") mossetpe ;; esac
+case $do_user in y)
+		echo
+		echo -n "OK to also update the logical node numbers [Y/n]? "
+		read yesno
+		case "$yesno" in [yY]|"")
+		  suggest_userview > $ROOT/etc/mosix/userview.map || {
+			echo "Sorry, Failed writing the logical node numbers to $ROOT/etc/mosix/userview.map!"
+			exit 1
+		  } ;;
+		esac ;;
+	n) echo
+	   echo It is very recommended that you also update the
+	   echo logical node numbers to reflect the changes you just made.
+	   echo ;;
+esac

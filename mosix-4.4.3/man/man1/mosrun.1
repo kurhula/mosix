@@ -1,0 +1,680 @@
+.\" copyright (c) 2005 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "November 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds document-title MOSRUN
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOSRUN
+- Running MOSIX programs
+.Sh SYNOPSIS
+.Nm \&mosrun
+.Pa [ location_options ]
+.Pa [ program_options ]
+.Pa program [ args ] ...
+.Nm \&mosrun
+.Pa -S{maxjobs}
+.Pa [ location_options ]
+.Pa [ program_options ]
+.Pa {commands-file} [ ,{failed-file} ]
+.Nm \&mosrun
+.Pa -R{filename}
+.Pa [ -O{fd=filename}[,{fd2=fn2}] ] . . .
+.Pa [ location_options ]
+.br
+.Nm \&mosrun
+.Pa -I{filename}
+.br
+.Nm \&mosenv
+.Pa { same-arguments-as-mosrun }
+.br
+.Nm \&mosnative
+.Pa program [ args ] . . .
+.sp
+.in -4
+.Pa Location options:
+.sp
+.in +3
+.Pa [ -r{host} |
+.Pa -{a.b.c.d} |
+.Pa -{n} |
+.Pa -h |
+.Pa -b |
+.Pa [ -L ]
+.Pa [ -l ]
+.Pa [ -G ]
+.Pa [ -g ]
+.Pa [ -F ]
+.Pa [ -A{minutes} ]
+.Pa [ -N{max} ]
+.in -3
+.sp
+.Pa Program Options:
+.sp
+.in +3
+.Pa [ -m{mb} ]
+.Pa [ -e ]
+.Pa [ -w ]
+.Pa [ -u ]
+.Pa [ -C{filename} ]
+.Pa [ -z ]
+.Pa [ -c ]
+.Pa [ -n ]
+.Pa [ -d {0-10000} ]
+.Pa [ -X{/directory} ] . . .
+.sp
+.in -3
+.in -4
+.Sh DESCRIPTION
+.Pa Mosrun
+runs migratable programs that can potentially migrate to other nodes
+within a
+.Pa MOSIX(7)
+cluster (or a multi-cluster private cloud).  All child processes of
+migratable programs can migrate as well, independently of their parent.
+.Pp
+Migratable programs act strictly as if they were running on their home-node,
+from which they were launched.
+Specifically, all their file and socket operations (opening, reading, writing,
+sending, receiving) is performed on their home-node, so even when a migrated
+process is running on another node, it uses the network to perform the
+operation on the home-node, then returns the results to the program.
+.Pp
+Certain Linux features,
+such as shared-memory, are not available to migratable programs (see the
+.Pa LIMITATIONS
+section below).
+.Pp
+.in -2
+Following are the arguments of
+.Pa mosrun ,
+beginning with where to start the program:
+.in +2
+.sp
+.Bl -tag -compact -width abcdefghijklmnopqrstuv
+.It Pa -b
+attempt to run on the best available node
+.It Pa -r{hostname}
+on the given host
+.It Pa -{a.b.c.d}
+on the given IP address
+.It Pa -{n}
+on the given MOSIX node-number
+.It Pa -h
+in the home-node
+.El
+.sp
+(in some installations, the system-adminstrator may force the
+.Pa -b
+option, disallowing the rest of the above options)
+.sp
+.Bl -tag -width a
+.It Pa -m{mb}
+Specify the maximum amount of memory (in Megabytes) that the program requires,
+so that programs will not automatically migrate to nodes with insufficient
+available memory (except to their home-node in circumstances when a program
+must return home).  Also, combined with the
+.Pa -b
+flag, the program will only consider to start running on nodes with
+sufficient memory and will not begin until at least one such node is found.
+.It Pa -e
+Usually, a program that encounters an unsupported feature (see
+.Pa LIMITATIONS
+below) terminates.  This flag allows the program to continue and instead
+behave as follows:
+.Bl -enum -width a
+.It
+.Pa mmap(2)
+with (flags & MAP_SHARED) - but !(prot & PROT_WRITE), replaces the
+MAP_SHARED with MAP_PRIVATE (using MAP_SHARED without PROT_WRITE seems
+unusual or even faulty, but is unnecessarily used within some Linux libraries).
+.It
+all other unsupported system-call return -1 and "errno" is set to ENOSYS.
+.El
+.It Pa -w
+Same as
+.Pa -e ,
+but whereas
+.Pa -e
+is silent,
+.Pa -w
+causes
+.Pa mosrun
+to print an error message to the standard-error whenever an unsupported
+system-call is encountered.
+.It Pa -u
+Reverse the effect of
+.Pa -e
+or
+.Pa -w :
+this can be used when a program (especially a shell-script) wants to spawn
+a son-process that should terminate upon encountering an unsupported feature.
+Also, as the system-administrator can make the
+.Pa -e
+or
+.Pa -w
+arguments the default, the
+.Pa -u
+flag can be used to reverse their effect.
+.It Pa -L
+Do not migrate the program automatically.  The program may still be migrated
+manually or when circumstances do not allow it to continue running where it is
+and force it to migrate back to its home-node.
+.It Pa -l
+reverse the effect of
+.Pa -L
+and allow automatic migrations.
+.It Pa -g
+Prevents the program from being automatically frozen (this may be important
+for interactive programs or programs that must communicate frequently or
+periodically with other program).
+.It Pa -G
+Reverse the effect of
+.Pa -g ,
+re-allowing the program to be automatically frozen.
+.It Pa -S{maxjobs}
+Queue a list of jobs (potentially a very long list).
+.Pp
+Instead of a program and its arguments, following the list of arguments is a
+.Pa commands-file ,
+containing one command per line (interpreted by the standard shell,
+.Pa bash(1) ) :
+all other arguments will apply to each of the command-lines.
+.Pp
+This option is commonly used to run the same program with many different
+sets of arguments.  For example, the contents of
+.Pa commands-file
+could be:
+.sp
+.in +6
+	my_program -a1 < ifile1 > output1
+.br
+	my_program -a2 < ifile2 > output2
+.br
+	my_program -a3 < ifile3 > output3
+.in -6
+.Pp
+Command-lines are started in the order they appear in
+.Pa commands-file .
+While the number of command-lines is unlimited,
+.Pa mosrun
+will run concurrently up to
+.Pa maxjobs
+(1-30000) command-lines at any given time: when any command-line terminates,
+a new command-line is started.
+.Pp
+Lines should not be terminated by the shell's background ampersand sign ("&").
+As
+.Pa bash
+spawns a son-process to run the command when redirection is used,
+when the number of processes is an issue, it is recommended to prepend
+the keyword
+.Pa exec
+before each command line that uses redirection.
+For example:
+.sp
+.in +6
+	exec my_program -a1 < ifile1 > output1
+.br
+	exec my_program -a2 < ifile2 > output2
+.br
+	exec my_program -a3 < ifile3 > output3
+.in -6
+.Pp
+The exit status of
+.Pa mosrun -S{maxjobs}
+is the number of command-lines that failed
+(255 if more than 255 command-lines failed).
+.Pp
+As a further option, the
+.Pa commands-file
+argument can be followed by a comma and another file-name:
+.Pa commands-file,failed-commands .
+.Pa Mosrun
+will then create the second file and write to it the list of all the commands
+(if any) that failed (this provides an easy way to re-run only those
+commands that failed).
+.Pp
+.It Pa -F
+Run the program even if the requested node is unavailable
+(otherwise, an error-message will be displayed and the program will not start).
+.It Pa -z
+The program's arguments begin at argument #0 (usually the arguments,
+if any, begin at argument #1 and argument #0 is assumed to be identical
+to the program-name).
+.It Pa -C{filename}
+Select an alternative file-basename for checkpoints (See
+.Pa CHECKPOINTS
+below).
+.It Pa -N{max}
+Limit the number of checkpoint files (See
+.Pa CHECKPOINTS
+below).
+.It Pa -A{minutes}
+Perform an automatic checkpoint every given number of minutes (See
+.Pa CHECKPOINTS
+below).
+.It Pa -R{filename}
+Recover and continue to run from a saved checkpoint file (See
+.Pa CHECKPOINTS
+below).
+.It Pa [ -O{fd=filename}[,{fd2=filename2}] ] . . .
+When using the
+.Pa -R{filename}
+argument to recover after a checkpoint,
+replace one or more file-descriptors (See
+.Pa CHECKPOINTS
+below).
+.It Pa -I{filename}
+Inspect a checkpoint file (See
+.Pa CHECKPOINTS
+below).
+.It Pa -X {/directory}
+Declare a private temporary directory (see
+.Pa PRIVATE TEMPORARY FILES
+below).
+.It Pa -c
+System calls and I/O operations are monitored and taken into account
+in automatic migration considerations, tending to pull processes towards their
+home-nodes.  Use this flag if you want to tell
+.Pa mosrun
+to not take system calls and I/O operations into the migration considerations.
+.It Pa -n
+Reverse the effect of the
+.Pa -c
+flag: include system-calls and I/O operations into account in
+automatic migration considerations.
+.It Pa -d{decay}
+Set the rate of decay of process-statistics for automatic migration
+considerations as a fraction of 10000 per second (see
+.Pa mosix(7) ) .
+.Pa 'decay'
+must be an integer between 0 (immediate decay) and 10000 (no decay at all).
+The default decay is 9976.
+.El
+.Pp
+Note that the following arguments may also be changed at run time by the
+program itself:
+.Pa -m, -G, -e/-w/-u, -L/-l, -g/-G, -c, -t/-T, -C, -N, -A, -c/-n/-d
+(See
+.Pa mosix(7) ) .
+.Sh CHECKPOINTS
+Most CPU-intensive processes running under
+.Pa mosrun
+can be checkpointed: this means that an image
+of those processes is saved to a file, and when necessary, the process
+can later recover itself from that file and continue to run from that point.
+.Pp
+For successful checkpoint and recovery, the process must not depend heavily on
+its Linux environment.  Specifically, the following processes cannot be
+checkpointed at all:
+.sp
+.Bl -enum -compact -width a
+.It
+Processes with setuid/setgid privileges (for security reasons).
+.It
+Processes with open pipes or sockets.
+.El
+.sp
+The following processes can be checkpointed, but may not run correctly after
+being recovered:
+.sp
+.Bl -enum -compact -width a
+.It
+Processes that rely on process-ID's of themselves or other processes
+(parent, sons, etc.).
+.It
+Processes that rely on parent-child relations (e.g. use
+.Pa wait(2) ,
+Terminal job-control, etc.).
+.It
+Processes that coordinate their input/output with other running processes.
+.It
+Processes that rely on timers and alarms.
+.It
+Processes that cannot afford to lose signals.
+.It
+Processes that use system-V IPC (semaphores and messages).
+.El
+.Pp
+The
+.Pa -C{filename}
+argument specifies where to save checkpoints: when a new checkpoint is saved,
+that file-name is given a consecutive numeric extension (unless it already
+has one). For example, if the argument
+.Pa -Cmysave
+is given, then the first checkpoint will be saved to
+.Pa mysave.1 ,
+the second to
+.Pa mysave.2 ,
+etc.,
+and if the argument
+.Pa -Csave.4
+is given, then the first checkpoint will be saved to
+.Pa save.4 ,
+the second to
+.Pa save.5 ,
+etc.
+If the
+.Pa -C
+argument is not provided, then the checkpoints will be saved to the
+default:
+.Pa ckpt.{pid}.1 , ckpt.{pid}.2 \  . . .
+The
+.Pa -C
+argument is NOT inherited by child processes.
+.Pp
+The
+.Pa -N{max}
+argument specifies the maximum number of checkpoints to produce before
+recycling the checkpoint versions.  This is mainly needed in order to
+save disk space.  For example, when running with the arguments:
+.Pa -Csave.4 -N3 ,
+checkpoints will be saved in
+.Pa save.4 , save.5 , save.6, save.4 , save.5 , save.6 , save.4 ...
+.br
+The 
+.Pa -N0
+argument returns to the default of unlimited checkpoints; an argument of
+.Pa -N1
+is risky, because if there is a crash just at the time when a
+backup is taken, there could be no remaining valid checkpoint file.
+Similarly, if the process can possibly have open pipe(s) or socket(s)
+at the time a checkpoint is taken, a checkpoint file will be created
+and counted - but containing just an error message, hence this argument
+should have a large-enough value to accommodate this possibility.
+The
+.Pa -N
+argument is NOT inherited by child processes.
+.Pp
+Checkpoints can be triggered by the program itself, by a manual request
+(see
+.Pa mosmigrate(1) )
+and/or at regular time intervals.
+The
+.Pa -A{minutes}
+argument requests that checkpoints be automatically taken every given
+number of minutes.  Note that if the process is within a blocking
+system-call (such as reading from a terminal) when the time for
+a checkpoint comes, the checkpoint will be delayed until after the completion
+of that system call.  Also, when the process is frozen, it will not produce a
+checkpoint until unfrozen.
+The
+.Pa -A
+argument is NOT inherited by child processes.
+.Pp
+With the
+.Pa -R{filename}
+argument,
+.Pa mosrun
+recovers and continue to run the process from its saved checkpoint file.
+Program options are not permitted with
+.Pa -R ,
+since their values are recovered from the checkpoint file.
+.Pp
+It is not always possible (or desirable) for a recovered program to
+continue to use the same files that were open at the time of checkpoint:
+.Pa mosrun -I{filename}
+inspects a checkpoint file and lists the open files, along with their
+modes, flags and offsets, then the
+.Pa -O
+argument allows the recovered program to continue using different files.
+Files specified using this option, will be opened (or created)
+with the previous modes, flags and offsets.
+The format of this argument is usually a comma-separated list of
+file-descriptor integers, followed by a '=' sign and a file-name.
+For example:
+.Pa -O1=oldstdout,2=oldstderr,5=tmpfile ,
+but in case one or more file-names contain a comma, it is optional to
+begin the argument with a different separator, for example:
+.Pa -O@1=file,with,commas@2=oldstderr@5=tmpfile .
+.Pp
+In the absence of the
+.Pa -O
+argument, regular files and directories are re-opened with the previous modes,
+flags and offsets.
+.Pp
+Files that were already unlinked at the time of checkpoint, are assumed to be
+temporary files belonging to the process, and are also saved and recovered
+along with the process (an exception is if an unlinked file was opened for
+write-only).  Unpredictable results may occur if such files are used to
+communicate with other processes.
+.Pp
+As for special files (most commonly the user's terminal, used as standard
+input, output or error) that were open at the time of checkpoint - if
+.Pa mosrun
+is called with their file-descriptors open, then the existing open files are
+used (and their modes, flags and offsets are not modified).
+Special files that are neither specified in the
+.Pa -O
+argument, nor open when calling
+.Pa mosrun ,
+are replaced with
+.Pa /dev/null .
+.Pp
+While a checkpoint is being taken, the partially-written checkpoint file
+has no permissions (chmod 0).  When the checkpoint is complete, its mode
+is changed to 0400 (read-only).
+.Sh PRIVATE TEMPORARY FILES
+Normally, all files are created on the home-node by migratable programs
+and all file-operations are performed there.  This is important because
+programs often share files, but can be costly: many programs use temporary
+files which they never share - they create those files as secondary-memory
+and discard them when they terminate.  It is best to migrate such files with
+the process rather than to keep them in the home-node.
+.Pp
+The
+.Pa -X {/directory}
+argument tells
+.Pa Mosrun
+that a given directory is only used for private temporary files:
+all files that the program creates in this directory are kept with
+the process that created them and migrate with it.
+.Pp 
+The
+.Pa -X
+argument may be repeated, specifying up to 10 private temporary directories.
+The directories must start with '/'; can be up to 256 characters long;
+cannot include ".."; and for security reasons cannot be within "/etc",
+"/proc", "/sys" or "/dev".
+.Pp
+Only regular files are permitted within private temporary directories:
+no sub-directories, links, symbolic-links or special files are allowed
+(but sub-directories can be specified by an extra
+.Pa -X
+argument).
+.Pp
+Private temporary file names must begin with '/' (no relative pathnames)
+and contain no ".." components.
+The only file operations currently supported for private temporary files are:
+open, creat, lseek, read, write, close, chmod, fchmod, unlink, truncate,
+ftruncate, access, stat.
+.Pp
+File-access permissions on private temporary files are provided for
+compatibility, but are not enforced: the
+.Pa stat(2)
+system-call returns 0 in
+.Pa st_uid
+and
+.Pa st_gid .
+.Pa stat(2)
+also returns the file-modification times according to the node where
+the process was running when making the last change to the file.
+.Pp
+The per-process maximum total size of all private
+temporary files is set by the system-administrator.  Different maximum values
+can be imposed when running on the home-node, in the local cluster and on other
+clusters in the multi-cluster - exceeding this maximum will cause a process to
+migrate back to its home-node.
+.Sh ALTERNATIVE FREEZING SPACE
+Migratable processes can sometimes be frozen (you can freeze your processes
+manually and the system-administrator usually sets an automatic-freezing
+policy - See
+.Pa mosix(7) ) .
+.Pp
+The memory-image of frozen processes is saved to disk.
+Normally the system-administrator determines where on disk to store your
+frozen processes, but you can override this default and set your own
+freezing-space.  One possible reason to do so is to ensure that your
+processes (or some of them) have sufficient freezing space regardless
+of what other users do.
+Another possible reason is to protect other users if you believe that your
+processes (or some of them) may require so much memory that they could
+disturb other users.
+.Pp
+Setting your own freezing space can be done either by setting the
+environment-variable
+.Pa FREEZE_DIR
+to an alternative directory (starting with '/');
+or if you wish to specify more than one freeze-directory,
+by creating a file:
+.Pa $HOME/.freeze_dirs
+where each line contains a directory-name starting with '/'.
+For more details, read about "lines starting with '/'"
+within the section about configuring
+.Pa /etc/mosix/freeze.conf
+in the
+.Pa mosix(7)
+manual.
+.Pp
+You must have write-access to the your alterantive freeze-directory(s).
+The space available in alternative freeze-directories is subject to
+possible disk quotas.
+.Sh RECURSIVE MOSRUN
+It is possible to invoke
+.Pa mosrun
+within a program that is already running under
+.Pa mosrun .
+This is common, for example, within shell-scripts or a
+.Pa Makefile
+that contains calls to
+.Pa mosrun .
+.Pp
+Unless requesting explicitly otherwise, recursive programs will
+inherit the following (and only the following) arguments:
+.in +4
+.Pa -c , -d , -e , -L , -l , -g, -G, -m , -n , -T , -t , -u , -w .
+.in -4
+.Pp
+If you want a program running under
+.Pa mosrun
+(including a shell or shell-script) to fork a non-migratable child-program,
+use the utility:
+.sp
+.ti +10
+.Pa mosnative {program} [args]...
+.sp
+.Pa Mosnative
+programs are run directly under Linux in their parent's home-node
+and are not subject to the limitations of migratable programs
+(but cannot migrate to other nodes either).
+.Sh MOSENV
+The variant
+.Pa mosenv
+is used to circumvent the loss of certain environment variables by the
+GLIBC library due to the fact that
+.Pa mosrun
+is a "setuid" program: if your program relies on the settings of
+dynamic-linking environment variables (such as LD_LIBRARY_PATH)
+or
+.Pa malloc(3)
+debugging (MALLOC_CHECK_), use
+.Pa mosenv
+instead of
+.Pa mosrun .
+.Sh LIMITATIONS
+Some system-calls are not supported by migratable programs,
+including system-calls that are tightly connected to resources of
+the local node or intended for system-administration.
+These are:
+.sp
+acct, add_key, adjtimex, afs_syscall, bdflush,
+capget, capset, chroot, clock_getres, clock_nanosleep, clock_settime,
+create_module, delete_module, epoll_create, epoll_create1,
+epoll_ctl, epoll_pwait, epoll_wait, eventfd, eventfd2, fanotify_init,
+fanotify_mark,
+futex, get_kernel_syms, get_mempolicy, get_robust_list, getcpu,
+getpmsg, init_module, inotify_add_watch, inotify_init, inotify_init1,
+inotify_rm_watch,
+io_cancel, io_destroy, io_getevents, io_setup, io_submit, ioperm, iopl,
+ioprio_get, ioprio_set, kexec_load, keyctl, lookup_dcookie, madvise,
+mbind, migrate_pages, mlock, mlockall, move_pages, mq_getsetattr,
+mq_notify, mq_open, mq_timedreceive, mq_timedsend,
+mq_unlink, munlock, munlockall, nfsservctl, perf_event_open,
+personality, pivot_root, prlimit64, prof_counter_open, ptrace,
+quotactl, reboot, recvmmsg, remap_file_pages, request_key, rt_sigqueueinfo,
+rt_sigtimedwait, rt_tgsigqueueinfo,
+sched_get_priority_max, sched_get_priority_min,
+sched_getaffinity,
+sched_getparam, sched_getscheduler, sched_rr_get_interval, sched_setaffinity,
+sched_setparam, sched_setscheduler, security, set_mempolicy,
+setdomainname, sethostname, set_robust_list,
+settimeofday, shmat, signalfd, signalfd4, swapoff, swapon, syslog, timer_create,
+timer_delete, timer_getoverrun, timer_gettime, timer_settime, timerfd,
+timerfd_gettime, timerfd_settime,
+tuxcall, unshare, uselib, vmsplice, waitid.
+.Pp
+In addition,
+.Pa mosrun
+supports only limited options for the following system-calls:
+.sp
+.
+.Bl -tag -compact -width abcde
+.It Pa clone
+The only permitted flags are CLONE_CHILD_SETTID, CLONE_PARENT_SETTID,
+CLONE_CHILD_CLEARTID, and the combination CLONE_VFORK|CLONE_VM;
+the child-termination signal must be SIGCLD and the stack-pointer (child_stack)
+must be NULL.
+.It Pa getpriority
+may refer only to the calling process.
+.It Pa ioctl
+The following requests are not supported:
+TIOCSERGSTRUCT, TIOCSERGETMULTI, TIOCSERSETMULTI,
+SIOCSIFFLAGS, SIOCSIFMETRIC, SIOCSIFMTU, SIOCSIFMAP, SIOCSIFHWADDR,
+SIOCSIFSLAVE, SIOCADDMULTI, SIOCDELMULTI, SIOCSIFHWBROADCAST, SIOCSIFTXQLEN,
+SIOCSMIIREG, SIOCBONDENSLAVE, SIOCBONDRELEASE, SIOCBONDSETHWADDR,
+SIOCBONDSLAVEINFOQUERY, SIOCBONDINFOQUERY, SIOCBONDCHANGEACTIVE, SIOCBRADDIF,
+SIOCBRDELIF.
+Non-standard requests that are defined in drivers that are not part of the
+standard Linux kernel are also likely to not be supported.
+.It Pa ipc
+the following SYSV-IPC calls are not supported:
+.Pa shmat , semtimedop ,
+new-version calls (bit 16 set in call-number).
+.It Pa mmap
+MAP_SHARED and mapping of special-character devices are not permitted.
+.It Pa prctl
+only the PR_SET_DEATHSIG and PR_GET_DEATHSIG options are supported.
+.It Pa setpriority
+may refer only to the calling process.
+.It Pa setrlimit
+it is not permitted to modify the maximum number of open files (RLIMIT_NOFILES):
+.Pa mosrun
+fixes this limit at 1024.
+.El
+.Pp
+Users are not permitted to send the SIGSTOP signal to programs run by
+.Pa mosrun .
+SIGTSTP should be used instead (and
+.Pa moskillall(1)
+changes SIGSTOP to SIGTSTP).
+.Pp
+Attempts to run 32-bit programs by
+.Pa mosrun
+will result in the program running in native mode (as if it was run by
+.Pa mosnative ) .
+.Sh SEE ALSO
+.Xr mosmigrate 1 ,
+.Xr moskillall 1 ,
+.Xr mosps 1 ,
+.Xr direct_communication 7 ,
+.Xr mosix 7 .

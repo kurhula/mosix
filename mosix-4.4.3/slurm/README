@@ -1,0 +1,71 @@
+How to use MOSIX with SLURM (administrator installation guide):
+---------------------------------------------------------------
+
+Here is a prototype method of combining Slurm with MOSIX - 
+feel free to adjust and modify the scripts in this directory
+to suit your specific needs.
+
+1) Select a directory that is accessible to the whole cluster and
+   writeable only to SlurmUser.  Any directory name will do, but the
+   rest of this page assumes that you selected "/usr/local/slurm/scripts".
+
+   In this directory install the following files, with execute permission:
+
+	gmprolog, mprolog, mepilog
+
+2) Create the file "/usr/local/slurm/scripts/slurm_mosix.conf",
+   with the following lines:
+
+   COMMONDIR={directory}
+	A full pathname to a directory, writeable by SlurmUser but
+	only readable to other users on all nodes (this will be used
+	as a scratch directory and will only contain small files).
+
+   SLURMBIN={directory}
+	The full directory path where the SLURM binaries live,
+	(usually COMMONDIR=/usr/local/slurm/bin)
+
+3) Create the file "/usr/local/slurm/scripts/world.conf"
+   Each line in this file should have a host-name, optionally
+   followed by the number of hosts with sequential IP addresses.
+
+   The host-name should preferrably be an IP address (when possible),
+   as this will save the prologs time, calling "gethostbyname()", so
+   jobs can start quicker.
+
+   Host-names should include all the nodes where MOSIX is installed
+   within the cluster(s) managed by the local Slurm controller, but
+   are not limited to that and may also include nodes that are not
+   configured by Slurm at all, or are managed independetly by other
+   Slurm controllers (eg. of other departments).
+
+4) Install MOSIX on your cluster.
+
+5) Configure "slurm.conf":
+
+   PrologSlurmctld=/usr/local/slurm/scripts/gmprolog
+   Prolog=/usr/local/slurm/scripts/mprolog
+   Epliog=/usr/local/slurm/scripts/mepilog
+
+   Then add to all lines that describe a MOSIX-enabled node or a range
+   of MOSIX-enabled nodes the following:
+	Feature=mosix
+
+7) Run "scontrol reconfigure".
+
+8) Instruct your users:
+   a) In the allocation phase ("srun", "sbatch" or "salloc"),
+      use the flags "-O -Cmosix\*{MHN}", where "MHN" is the desired
+      number of MOSIX home-nodes for the job.
+	Note that since Slurm cannot assign more than 128 tasks per node,
+	even with oversubscribing, a sufficient number of MOSIX home-nodes
+        should be specified.
+
+   b) All commands should be preceded with "mosrun [mosrun-parameters]".
+      The mosrun-parameters should normally include "-b" and "-m{mem}".
+
+   c) No memory-requirements should be specified in "srun", because
+      Slurm does not overcommit memory.
+
+   If users find the above too hard, then you may prefer to write
+   small wrapper script(s) for their convience.

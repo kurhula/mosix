@@ -1,0 +1,60 @@
+.\" copyright (c) 2005 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds document-title MOSBESTNODE
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOSBESTNODE
+- Select best node to run on
+.Sh SYNOPSIS
+.Nm \&mosbestnode
+.Pa [ -u ] [ -n ] [ -w ] [ -m{mb} ]
+.Sh DESCRIPTION
+.Pa Mosbestnode
+selects the best node to run a new MOSIX process on.
+.Pp
+.Pa Mosbestnode
+normally prints the selected node's IP address.  If the
+.Pa -u
+argument is used and the node has an associated MOSIX node number,
+.Pa mosbestnode
+prints its MOSIX node number instead.
+.Pp
+The selection is normally for the immediate sending of a job
+to the selected node by means other than
+.Pa mosrun(1)
+(such as "rsh", "ssh", or MPI).  MOSIX is updated to assume that
+a new process will soon start on the selected node: when calling
+.Pa mosbestnode
+for any other purpose (such as information gathering), use the
+.Pa -n
+argument, to prevent misleading MOSIX as if a new process is about
+to be started.
+.Pp
+The
+.Pa -m{mb}
+argument narrows the selection to nodes that have at least
+.Pa mb
+Megabytes of free memory.
+.Pp
+When the
+.Pa -w
+argument is used,
+.Pa mosbestnode
+waits until an appropriate node is found:
+otherwise, if no appropriate node is found,
+.Pa mosbestnode
+prints "0" and exits.
+.Sh SEE ALSO
+.Xr mosrun 1 ,
+.Xr mosix 7 .

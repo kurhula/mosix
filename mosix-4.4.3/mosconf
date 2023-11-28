@@ -1,0 +1,111 @@
+#!/bin/sh -
+#
+# Copyright (c) 2001 - 2015, Amnon BARAK, all rights reserved.
+# All rights reserved.
+# MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+#
+# THIS SOFTWARE IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+# WHATSOEVER. NO LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING
+# FROM THE USE OF THIS SOFTWARE WILL BE ACCEPTED.
+
+progs=`expr $0 : '\(.*\)mosconf'`
+echo MOSIX CONFIGURATION
+echo ===================
+
+case "$1" in /*) ROOT="$1" ;;
+	0) ROOT= ;;
+*) while :
+do
+	echo
+	echo "If this is your cluster's file-server and you want to configure MOSIX"
+	echo "for a set of nodes with a common root, please type their common root"
+	echo directory.  Otherwise, if you want to configure the node that you are
+	echo -n "running on, just press <ENTER> :- "
+	read ROOT
+	case "$ROOT" in *[\	\ \<\>\&\\\'\"\`]*) continue ;;
+		/*) [ -d $ROOT ] && break
+			echo "No such Directory!"
+			;;
+		"" | /) ROOT= ; break ;;
+		*) ROOT=`pwd`/$ROOT ;
+			[ -d $ROOT ] && break
+			echo "No such Directory ($ROOT)!"
+			;;
+	esac
+done ;;
+esac
+
+export ROOT
+mkdir -p $ROOT/etc/mosix
+mkdir -p $ROOT/etc/mosix/partners
+grep ^/ $ROOT/etc/mosix/freeze.conf > /dev/null 2>/dev/null || [ -e $ROOT/freeze ] || mkdir -p $ROOT/freeze
+case `ls $ROOT/etc/mosix/partners` in "") MULTI=n ;; *) MULTI=y ;; esac
+export MULTI
+any=n
+while :
+do
+	rec1=
+	rec2=
+	rec3=
+	rec4=
+	[ -f $ROOT/etc/mosix/mosix.map ] || rec1="	(ESSENTIAL)"
+	[ -f $ROOT/etc/mosix/secret ] || rec2="		(ESSENTIAL)"
+	[ -f $ROOT/etc/mosix/userview.map ] || rec3="		(recommended)"
+	[ -f $ROOT/etc/mosix/speed ] || rec4='		(recommended)'
+	echo
+	case $any in n)
+		echo "What would you like to configure?"
+		echo =================================
+		;;
+		y)
+		echo "What would you like to configure next?"
+		echo ======================================
+		;;
+	esac
+	echo 1. Which nodes are in this cluster$rec1
+	case $MULTI in y)
+		echo 2. Partner clusters in your multi-cluster private cloud
+		echo 3. Authentication$rec2
+		echo 4. Logical node numbering$rec3
+		/bin/echo 5. Processor speed$rec4
+		echo 6. Freezing policies
+		echo 7. Miscellaneous policies
+		echo "8. Parameters of 'mosrun'"
+		;; n)
+		echo 2. Authentication$rec2
+		echo 3. Logical node numbering$rec3
+		/bin/echo 4. Processor speed$rec4
+		echo 5. Freezing policies
+		echo 6. Miscellaneous policies
+		echo 7. Become part of a multi-cluster private cloud
+		echo "8. Parameters of 'mosrun'"
+	;; esac
+	[ $any = y ] && echo q. Exit
+	echo
+	echo -n "Configure what :- "
+	read what
+	case $MULTI in n)
+		case "$what" in
+			1) $progs""mosconf_cluster ; any=y ;;
+			2) $progs""mosconf_auth ; any=y ;;
+			3) $progs""mosconf_numbers ; any=y ;;
+			4) $progs""mosconf_speed ; any=y ;;
+			5) $progs""mosconf_freeze_c ; any=y ;;
+			6) $progs""mosconf_misc_c ; any=y ;;
+			7) MULTI=y ; $progs""mosconf_multi ; any=y ;;
+			8) $progs""mosconf_mosrun ; any=y ;;
+			[qQfFxX]*) exit 0 ;;
+		esac ;;
+		*) case "$what" in
+			1) $progs""mosconf_cluster ; any=y ;;
+			2) $progs""mosconf_multi ; any=y ;;
+			3) $progs""mosconf_auth ; any=y ;;
+			4) $progs""mosconf_numbers ; any=y ;;
+			5) $progs""mosconf_speed ; any=y ;;
+			6) $progs""mosconf_freeze_g ; any=y ;;
+			7) $progs""mosconf_misc_g ; any=y ;;
+			8) $progs""mosconf_mosrun ; any=y ;;
+			[qQfFxX]*) exit 0 ;;
+		esac ;;
+	esac
+done

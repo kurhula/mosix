@@ -1,0 +1,45 @@
+.\" copyright (c) 2009 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds document-title MOSTIMEOF
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOSTIMEOF
+- Report CPU usage of migratable processes
+.Sh SYNOPSIS
+.Nm \&timeof
+.Pa {pid}...
+.Pp
+.Sh DESCRIPTION
+.Pa Mostimeof
+reports the amount of CPU-time accumulated by one or more MOSIX/migratable
+processes, no matter where they run.
+Its argument(s) are the process-IDs of processes to inspect.
+.Pp
+.Sh NOTES
+.Bl -enum -width 12
+.It
+.Pa Mostimeof
+must run on the process' home-node.
+.It
+The report is of user-level CPU-time: system-time is not included.
+.It
+In clusters (or multi-clusters) where different nodes have different CPU speeds,
+the results could be the sum of CPU times from slower and faster
+processors.  Such reslts cannot be used for determining how long the
+inspected process(es) are still expected to run.
+.El
+.Sh SEE ALSO
+.Xr mosps 1 ,
+.Xr mosrun 1 ,
+.Xr mosix 7 .

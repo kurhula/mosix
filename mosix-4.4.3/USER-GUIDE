@@ -1,0 +1,461 @@
+                           MOSIX USER'S GUIDE
+                           ==================
+                              January 2016
+
+  This guide views MOSIX from the perspective of its users.
+
+  1. What can MOSIX do for me?
+  2. Running MOSIX programs
+     2.1. The basics
+     2.2. Advanced options
+     2.3. Spawning Native Linux child programs
+     2.4. Using pipes between migrated programs
+     2.5. Error messages
+  3. Operating on your existing programs
+     3.1. Listing your MOSIX-related processes
+     3.2. Finding how long your program was running
+     3.3. Migrating your programs manually
+     3.4. Killing your programs
+
+
+  1. What can MOSIX do for me?
+  ============================
+  MOSIX allows your programs to be migrated within a computer-cluster,
+  or even within a multi-cluster private cloud (as configured by your
+  system-administrator).  Each of your processes can migrate either
+  automatically (in order to achieve load-balancing and similar
+  optimisations), or by your manual request.  No matter how many times
+  a process migrates, it continues to behave as if it was still
+  running where you launched it (this means for example that it will
+  only use the files on that computer).
+
+  MOSIX is best for computational programs and becomes less effective
+  when your programs are Input/Output oriented or perform system-
+  calls.
+
+  Some programs are not suitable for MOSIX, including programs that
+  use shared-memory or threads (threads use shared-memory) and some
+  system/administration-programs.  The full list of unsupported
+  features is listen under the "LIMITATIONS" sections of the "mosrun"
+  manual.  You can also read it using:
+
+    man mosrun | sed -e '1,/^LIMITATIONS/d' -e '/^SEE ALSO/,$d' | more
+
+  If you are not sure whether your program can run under MOSIX, use
+  "mosrun -w" (see below) and check the error messages.
+
+  2. Running MOSIX programs
+  =========================
+
+  2.1 The basics
+  --------------
+  To run a MOSIX program, use:
+
+          mosrun [flags] {program} [arguments]
+
+  Following are the basic flags to use:
+
+-b
+      Start your program on the best available node (computer).
+      If unsure, use it!
+-m{mb}
+      Tell MOSIX how much memory your program may require, in Mega-
+      bytes.  If the amount changes during execution, use the maximum.
+      Use this option when you can, also as a courtesy to other users.
+-e OR -w
+      If "mosrun" complains about unsupported functions, then these
+      can help relax some restrictions so you can run your program
+      anyway.  In almost all cases, if your program runs, it will
+      still run correctly.  Running the C-shell ("csh") for example,
+      requires this option.  The difference between '-e' and '-w' is
+      that '-w' also logs all occurances of unsupported functions to
+      the standard-error and is therefore useful for debugging,
+      whereas '-e' is silent.
+-S{maxprograms}
+      If you want to run a large set of programs, you should create
+      your own private queue, using:
+
+              mosrun -S{maxprograms} [other-flags] {commands-file}
+
+      where {commands-file} contains one command per line.  "mosrun"
+      will then run {maxprograms} commands at any given time until all
+      programs complete.
+
+  Example 1
+  ---------
+  Running a program that is estimated to require 400MB of memory at
+  most:
+
+       % mosrun -b -m400 simple_program
+
+  Example 2
+  ----------
+  Running a large set of programs.  Each program requires a memory of
+  500MB, the private queue is used to limit the maximum number of
+  simultaneous programs to 200.
+
+       % cat my_script
+       my_program -x -y -z < /home/myself/file1 > /home/myself/output1
+       my_program -x -y -z < /home/myself/file2 > /home/myself/output2
+       my_program -x -y -z < /home/myself/file3 > /home/myself/output3
+       my_program -x -y -z < /home/myself/file4 > /home/myself/output4
+       my_program -x -y -z < /home/myself/file5 > /home/myself/output5
+                                   ...
+       % mosrun -b -m500 -e -S200 my_script
+
+  2.2 Advanced options
+  --------------------
+  You can tell "mosrun" where to start your program, using one of the
+  following arguments:
+
+    -b              Allow MOSIX to choose the best place to start
+    -h              On your own computer
+    -r{host}        On the given computer
+    -r{IP-address}  On the computer with the given IP-address
+    -{number}       On the given node-number (set by the system-
+                    administrator)
+
+  If you request to start your program on a computer that is down or
+  refuses to run it, the program will fail to start unless you also
+  provide the '-F' flag, in which case the program will then start on
+  the launching node.
+
+  The '-L' flag prevents automatic migrations.  Your program may still
+  be migrated manually and will still forcefully migrate back to its
+  home-node in certain emergencies.  The '-l' flag cancels '-L': this
+  is useful, for example, when "mosrun" is called by a shell-script
+  that already runs under "mosrun -L".
+
+  Certain Linux features, such as shared-memory, certain system-calls
+  and certain system-call parameters, are not supported.  By default,
+  when such features are encountered, the program is terminated.  The
+  '-e' (silent) or '-w' (verbose) options allow the program to
+  continue and instead only fail the unsupported system-calls as they
+  occur.  The '-u' option cancels both '-e' and '-w'.
+
+  MOSIX processes may be automatically frozen when the load is too
+  high, subject to policies configured by your system-administrator.
+  If you don't want your process to be frozen automatically (for
+  example because it communicates with other processes), use the '-g'
+  option.  The '-G' option cancels '-g'.
+
+  When using your private queue, if you want to find which programs
+  (if any) failed, you can specify a second file-name:
+
+          mosrun -S{number} {script-file},{fail-file}
+
+  Command-lines that failed will then be listed in {fail-file}.
+
+  Periodic automatic checkpoints can be produced using the
+  "-A{minutes}" argument.  By default, checkpoints are saved to files
+  whose names start with "ckpt.{process-ID}": the "-C{filename}"
+  argument can be used to select different file-names.
+
+  Checkpoint-files have a numeric extension to determine the
+  checkpoint-number, such as "myckpt.1", "myckpt.2", "myckpt.3".  The
+  "-N{max}" argument can be used to limit the number of checkpoint-
+  files: once that maximum is reached, checkpoint-numbers will start
+  again at 1, so new checkpoints will override the earlier
+  checkpoints.
+
+  To resume running from a checkpoint file, use "mosrun -R{checkpoint-
+  file}".
+
+  It is also possible to resume a program with different opened-files
+  than the files that were open when the checkpoint was taken - for
+  details, see "man mosrun".
+
+  Private temporary-directories can be specified with the '-X' option.
+
+  Other advanced options ('-c', '-n', '-d') can affect the automatic
+  migration-considerations of a program (see "man mosrun" for
+  details).
+
+
+  2.3. Spawning Native Linux child programs
+  -----------------------------------------
+  Once a program (including a shell) runs under "mosrun", all its
+  child-processes will be migratable as well, but also subject to the
+  limitations of MOSIX programs (such as being unable to use shared-
+  memory and threading).  If your shell, or shell-script, is already
+  running under "mosrun" and you want to run some program as a
+  standard Linux program, NOT under MOSIX, use the command:
+
+     mosnative {program} [args]...
+
+
+  3.4. Using pipes between migrated programs
+  ------------------------------------------
+  It is common to run two or more programs in a pipeline, so that the
+  output of the first becomes the input of the second, etc.  You can
+  do this using the shell:
+
+  program1 | program2 | program3 ...
+
+  If your shell (or shell-script) which generates the pipeline is
+  running under "mosrun" and the amount of data transferred between
+  the programs is considerable, then this operation can be quite slow.
+  Efficiency can be gained by using the MOSIX direct-communication
+  feature. Use:
+
+  mospipe "program1 [args1]..." "program2 [args2]..." program3...
+
+  "mospipe" already implies "mosrun", so you do not need to use
+  "mosrun mospipe" and the arguments that tell "mosrun" where to run
+  can be given to "mospipe" instead.  Full details can be found in
+  "man mospipe".
+
+
+  2.5. Error messages
+  -------------------
+  The following group of errors indicate that the program encountered
+  a feature that is not supported by "mosrun":
+
+  system-call '{system-call-name}' not supported under MOSIX
+  Shared memory (MAP_SHARED) not supported under MOSIX
+  Attaching SYSV shared-memory not supported under MOSIX
+  Prctl option #{number} not supported under MOSIX
+  IPC system-call #{number} not supported under MOSIX
+  Sysfs option '{number}' not supported under MOSIX
+  Ioctl 0x{hexadecimal-number} not supported under MOSIX
+  Mapping special character files not supported under MOSIX
+  getpriority/setpriority supported under MOSIX only for self
+
+  If you see any of the above errors you may either:
+  1. Use "mosrun -e" (or "mosrun -w") to make the program continue
+     anyway (although the unsupported feature will fail)
+  2. Modify your program so it does not use the unsupported feature.
+
+  Other errors include:
+
+  kernel does not support full ptrace options
+    - Make sure that the kernel is Linux version 3.10 or higher.
+  failed allocating memory
+    - There is not enough memory available on this computer: try again
+      later.
+  illegal system call #{number}
+    - The program attempted to run a system-call with a bad number:
+      there could be a bug in the program, or the MOSIX version is
+      very old and new system-calls were added since.
+  sysfs detected an unreasonably long file-system name
+    - The size of the buffer provided to the "sysfs()" system-call is
+      unreasonably large (more than 512 bytes - probably a fault in
+      the library).
+  WARNING: setrlimit(RLIMIT_NOFILE) ignored by MOSIX
+    - MOSIX does not allow programs to change their open-files limit.
+  File-descriptor #{number} is open (only 1024 files supported under
+  MOSIX)
+    - "mosrun" was called with a open file-descriptor numbered 1024 or
+      higher: this is not supported.
+  Failed reading memory-maps
+    - Either "/proc" is not mounted, or the kernel is temporarily out
+      of resources.
+  Failed opening memory file
+    - Either "/proc" is not mounted, or the kernel is temporarily out
+      of resources.
+  Kernel too secure to run MOSIX (by non-Super-User)
+    - The Linux kernel was compiled with extreme security limitations:
+      please check the security options in your Linux kernel.
+  failed migrating to {computer}: {reason}
+    - Failed attempt to start the program on the requested computer.
+      Reasons include:
+          "not in map"
+            - other computer is not recognized as part of this cluster
+              or multi-cluster.
+          "no response"
+            - perhaps MOSIX is not running on the requested computer?
+              or perhaps a fire-wall is blocking TCP/IP ports 253 on
+              the requested computer?
+          "other node refused"
+            - the requested computer was not willing to accept the
+              program.
+          "did not complete (no memory there?)"
+            - there were probably not enough resources to complete the
+              migration, or perhaps the requested computer just
+              crashed or was powered-off.
+  {computer} is too busy to receive now
+    - The requested computer refused to run the program.
+  connection timed out
+    The other computer stopped responding while preparing to run the
+      program.  Perhaps it crashed, or perhaps it runs a different
+      version of MOSIX, or perhaps even a different daemon is
+      listening to TCP/IP port 250.
+  Lost communication with {computer}
+    - The TCP/IP connection with the computer that was running the
+      program was severed.  Unfortunately this means that the program
+      had to be killed.
+  Process killed while attempting to migrate from {computer1} to
+  {computer2}
+    - Connection was severed while the program was migrating from one
+      remote computer to another.  Unfortunately this means that the
+      program had to be killed.
+  Unfreeze failed
+    - The program was frozen (usually due to a very high load), then
+      an attempt to un-freeze it failed, probably because there was
+      not enough memory on this computer.  Recovery was not possible.
+  Failed decompressing freeze file
+    - The program was frozen (usually due to a very high load), but
+      there were not enough resources (memory/processes) to complete
+      the operation and recovery was not possible.
+  Re-freezing because unfreeze failed
+    - The program was frozen (usually due to a very high load), then
+      an attempt to un-freeze it failed, probably because there was
+      not enough memory on this computer.  Recovery was possible by
+      re-freezing the program: you may want to manually un-freeze it
+      later when more memory is available.
+  No space to freeze
+    - The disk-space that was allocated for freezing (usually by the
+      system-administrator) was insufficient and so freezing failed.
+      The MOSIX configuration indicated not to recover in this
+      situation, so the program was killed.
+  Security Compromized
+    - Please tell this to your system-administrator and ask them to
+      run "mosconf", select the "Authentication" section and set new
+      passwords immediately.
+  Authentication violation with {computer}
+    - The given computer does not share the same password as this
+      computer: perhaps someone connected a different computer to the
+      network which does not really belong to the cluster?  Please
+      inform your system-administrator!
+  Target node runs an incompatible version
+    - Your computer and the computer on which you want to start your
+      program do not run the same (or a compatible) version of MOSIX.
+  {program} is a 32-bit program - will run in native Linux mode
+    - 32-bit programs are not migratable: your program will run
+      instead as a standard Linux program: consider re-compiling your
+      program for the 64-bit architecture.
+  remote-site ({computer}) seems to be dead
+    - No "heart-beat" detected from the computer on which your program
+      runs.
+  Corrupt or improper checkpoint file
+    - Perhaps this is the wrong file, or was tempered with, or the
+      checkpoint was produced by an older version of MOSIX that is no
+      longer compatible.
+  Could not restart with {filename}: {reason}
+    - Failed to open the checkpoint-file.
+  File-descriptor {file-number} was not open at the time of
+  checkpoint!
+    - When continuing from a checkpoint, attempted to redirect a file
+      (using "mosrun -R -O", see "man mosrun") that was not open at
+      the time of checkpoint.
+  Restoration failed: {reason}
+    - Insufficient resources to restart from the checkpoint: try again
+      later.
+  checkpoint file is compressed - but no /usr/bin/lzop here!
+    - The program "/usr/bin/lzop" is missing on this computer (perhaps
+      the checkpoint was taken on another computer?).
+  WARNING: no write-access in checkpoint directory!
+    - You requested to take checkpoints, but have no permission to
+      create new checkpoint-files in the specified directory (the
+      current-directory by default).
+  Checkpoint file {filename}: {reason}
+    - Failed to open the checkpoint-file for inspection.
+  Could not restore file-descriptor {number} with '{filename}':
+  {reason}
+    - When continuing from a checkpoint, the attempt to redirect the
+      given opened-file failed.
+  Restoration failed
+    - The checkpoint file is probably corrupt.
+  Line #{line-number} is too long or broken!
+    - The given line in the script-file ("mosrun -S") is either too
+      long or does not end with a line-feed character.
+  Commands-file changed: failed-commands file is incomplete!
+    - The script-file was modified while "mosrun -S" is running: you
+      should not do that!
+  Failed writing to failed-commands file!
+    - Due to some write-error, you will not be able to know from
+      {fail-file} which of your commands (if any) failed.
+  Invalid private-directory name ({name})
+    - Private-directories (where private-temporary-files live) must
+      start with '/' and not include "..".
+  Disallowed private-directory name ({name})
+    - Private-directories (where private-temporary-files live) must
+      not be within "/etc", "/proc", "/sys" or "/dev".
+  Too many private directories
+    - The maximum is 10.
+  Private directory name too long
+    - The maximum is 256 characters.
+  Insufficient disk-space for private files
+    - As your program migrated back to your home-node, it was found
+      that it used more private-temporary-file space than allowed.
+      This is usually a configuration problem (has your system-
+      administrator decreased this limit while your program was
+      running on another computer?).
+
+  3. Operating on your existing programs
+  ======================================
+
+  3.1. Listing your MOSIX-related processes
+  -----------------------------------------
+  The program "mosps" is quite similar to "ps" and shares many of its
+  arguments.  The main differences are that:
+
+  1. "mosps" shows only MOSIX and related processes.
+  2. "mosps" shows relevant MOSIX information such as where your
+     processes are running.
+  3. "mosps" does not show running statistics such as CPU time and
+     memory-usage (because this information is not readily available
+     for processes that run on other computers).
+
+  The most important information is under the column "WHERE", showing
+  where your processes are running.  This can be a node-number, an IP
+  address, the word "here" (if the process is running on your own
+  computer), the word "leaving" (if the process is leaving your
+  computer) or the word "starting" (if the process has just started so
+  it is still unclear where it will run).  If you prefer IP addresses,
+  use the '-I' flag; if you prefer the full host-name, use the '-h'
+  flag; and if you prefer just the host-name (without the domain), use
+  the '-M' flag.
+
+  The "FRZ" column shows whether your processes are frozen and if so
+  why.  The possible reasons are:
+
+  "A": Automatic freezing occurred.
+  "P": An external package requested to freeze the process (it is up
+       to that package to unfreeze it).
+  "M": The process was frozen manually (by yourself or the system-
+       administrator).
+
+  Run "mosps -N" to also see the "NMIGS" column, telling how many
+  times your processes have ever migrated.
+
+  When running programs with a private queue, you can use "mosps -S"
+  to find out how many programs completed and how many failed so far.
+  Only programs that were started with "mosrun -S" will be shown.
+
+  3.2. Finding how long your program was running
+  ----------------------------------------------
+  Run "mostimeof {pid}" to find out the total user-level running-time
+  that was accumulated by a MOSIX process.  {pid} is the process-ID
+  (which can be obtained by "mosps").  Several process-ID's may be
+  specified at once ("mostimeof {pid1} {pid2} ...").
+
+
+  3.3. Migrating your programs manually
+  -------------------------------------
+  Use "mosmigrate {pid} {hostanme or IP-address or node-number}" to
+  migrate a process to the given computer.
+
+  Use "mosmigrate {pid} home" to migrate a process back to its home-
+  node.
+
+  Use "mosmigrate {pid} freeze" to freeze your process.
+
+  Use "mosmigrate {pid} continue" to unfreeze your process.
+
+  Use "mosmigrate {pid} checkpoint" to cause your process to generate
+  a checkpoint.
+
+  Use "mosmigrate {pid} chkstop" to cause your process to generate a
+  checkpoint and stop with a SIGSTOP signal.
+
+  Use "mosmigrate {pid} chkexit" to cause your process to generate a
+  checkpoint and exit.
+
+  2.4 Killing your programs
+  -------------------------
+  Use "moskillall" to kill all your MOSIX programs (with the SIGTERM
+  signal).
+
+  Use "moskillall -{signal}" to send a specific signal to all your
+  MOSIX processes.

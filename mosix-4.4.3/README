@@ -1,0 +1,114 @@
+WELCOME TO MOSIX!
+
+This document describes how to install MOSIX.
+Further reading is available in the ADMINISTRATOR-GUIDE
+and in the on-line manuals, starting from "man mosix".
+
+MOSIX INSTALLATION
+==================
+
+1. Automatic installation
+-------------------------
+The simplest way to install MOSIX is to run "./mosix.install".
+This script can be used to install the MOSIX binaries either
+on the local node, or in a common root-directory that is shared
+by several nodes of a cluster.
+
+2. Integration with Slurm
+-------------------------
+If you wish to integrate MOSIX with the Slurm batch-system,
+read the instructions in the "slurm" directory.
+
+3. Manual installation
+----------------------
+Before beginning the installation, create the directories "/etc/mosix"
+and "/etc/mosix/var" (when "/etc" is non-writeable, the later can be a
+symbolic link to a writeable directory such as "/var/mosix"), then place
+each of the following files in the corresponding "Where" directory,
+then run the appropriate special instructions:
+
+File                     Where                  specific instructions
+------------------------------------------------------------------------------
+man/*			wherever manuals live - suggest /usr/local/man
+mos_autoconf		/sbin
+mos_checkconf		/sbin
+mos_in_job		/sbin
+mosbestnode		/bin		   	chmod u+s /bin/mosbestnode
+mos_checkconf		/sbin
+mosconf*		/sbin
+mosctl			/bin
+mosd			/sbin
+mosenv			/bin
+mosixd			/sbin
+moskillall		/bin			chmod u+s /bin/moskillall
+mosmigrate		/bin			chmod u+s /bin/mosmigrate
+mosmon			/bin
+mosnative		/bin
+mospipe			/bin
+mospostald		/sbin
+mosps			/bin			chmod u+s /bin/mosps
+mosremoted		/sbin
+mosrun			/bin			chmod u+s /bin/mosrun
+mossetpe		/sbin
+mostestload		/bin
+mostimeof		/bin			chmod u+s /bin/mostimeof
+
+3.1 If you cannot modify /bin or /sbin:
+--------------------------------------
+As a second (or third) choice, you may place the MOSIX binaries:
+instead of in /bin - in /usr/bin or in /usr/local/bin
+and instead of in /sbin - in /usr/sbin or in /usr/local/sbin
+
+If you do so, you must make sure that none of the above binaries
+already exists in /bin (or /sbin) from previous installations.
+
+3.2. Another recommended program:
+---------------------------------
+"lzop" is a fast compression program used by MOSIX to reduce
+the communication overhead.  "lzop" is freely available by
+courtesy of its author, Markus Franz Xaver Johannes Oberhumer.
+
+If you have a multi-cluster with computers in different buildings/sites,
+or if your network is slow, this program can improve MOSIX performance.  
+
+To install this program, run: "cp other/lzop /usr/bin/lzop"
+or download it from "http://www.lzop.org" into "/usr/bin/lzop".
+
+=================
+4. Configuration:
+=================
+
+The "mosconf" script lead you step-by-step through the various
+configuration items.  It is usually first called by "mosix.install".
+
+If you prefer to edit the configuration files manually, the format of
+all configuration files is given in the "CONFIGURATION" section of
+"man mosix" and at least the following files must be present:
+
+/etc/mosix/mosix.map	(which nodes are in the local cluster)
+/etc/mosix/secret	(multi-cluster-wide authentication - chmod 600!)
+
+Also very recommended:
+
+/etc/mosix/userview.map		(using node numbers instead of just IPs)
+
+If you intend to have a multi-cluster, you must also configure:
+
+/etc/mosix/partners/*	(multi-cluster partners)
+
+The following configuration files are optional, but commonly used:
+
+/etc/mosix/private.conf		(allocating space for private temporary files)
+/etc/mosix/retainpri		(delay processes of lower priority)
+/etc/mosix/speed		(to set the processor speed)
+/etc/mosix/freeze.conf		(freezing policy)
+
+The following configuration files are rarely used:
+
+/etc/mosix/maxguests		(limit number of guests from multi-cluster)
+/etc/mosix/mosip		(our IP - if not clear from "ifconfig")
+
+5. Starting MOSIX:
+------------------
+To start MOSIX, just run "mosd"
+(this is what "/etc/init.d/mosix start" does).

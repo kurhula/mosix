@@ -1,0 +1,38 @@
+#!/bin/sh -
+# This script should run as a "Prolog"
+# in order to fix the MOSIX configuration within SLURM.
+
+. `dirname $0`/slurm_mosix.conf
+
+[ -f $COMMONDIR/participants.$SLURM_JOB_ID ] || {
+	if [ -x /bin/mosctl ]
+	then
+		/bin/mosctl block
+		/bin/mosctl expel &
+	elif [ -x /usr/bin/mosctl ]
+	then
+		/usr/bin/mosctl block
+		/usr/bin/mosctl expel &
+	elif [ -x /usr/local/bin/mosctl ]
+	then
+		/usr/local/bin/mosctl block
+		/usr/local/bin/mosctl expel &
+	fi
+	exit 0
+}
+
+if [ -x /sbin/mos_in_job ]
+then
+	turnon=/sbin/mos_in_job
+elif [ -x /usr/sbin/mos_in_job ]
+then
+	turnon=/usr/sbin/mos_in_job
+elif [ -x /usr/local/sbin/mos_in_job ]
+then
+	turnon=/usr/local/sbin/mos_in_job
+else
+	exit 0
+fi
+$turnon -A `dirname $0`/world.conf `/bin/cat $COMMONDIR/participants.$SLURM_JOB_ID`
+
+exit 0

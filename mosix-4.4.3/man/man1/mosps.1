@@ -1,0 +1,189 @@
+.\" copyright (c) 2005 - 2015, Amnon Barak, all rights reserved.
+.\" MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+.\"
+.\" THIS MANUAL IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+.\" WHATSOEVER. NO LIABILITY OF ANY KIND FOR DAMAGES WHATSOEVER RESULTING
+.\" FROM THE USE OF THIS MANUAL WILL BE ACCEPTED.
+.\"
+.Dd "January 2014"
+.ds section M1
+.ds operating-system MOSIX
+.ds volume MOSIX Commands
+.ds date-string January 2014
+.ds document-title MOSPS
+.ds vT MOSIX Reference Manual
+.Os MOSIX
+.Sh NAME
+.Pa MOSPS
+- List information about MOSIX processes
+.Sh SYNOPSIS
+.Nm \&mosps
+.Pa [ subset of ps(1) options ]
+.Pa [ -I ] [ -h ] [ -M ] [ -L ] [ -O ] [ -n] [ -P ] [ -V ] [ -S ]
+.Pp
+.Pa Supported ps(1) options:
+.sp
+.Bl -tag -compact -width abcdefghijklmnopqrstuvwxyz12345678
+.It 1. single-letter options:
+.Pa TUacefgjlmnptuwx
+.It 2. single-letters preceded by '-':
+.Pa -AGHNTUadefgjlmptuwx
+.El
+.Pp
+.Sh DESCRIPTION
+.Pa Mosps
+lists MOSIX processes in
+.Pa \&"ps\&"
+style, emphasizing MOSIX-related information - see the
+.Pa ps(1)
+manual about the standard options of
+.Pa ps .
+Since some of the information in the
+.Pa ps(1)
+manual is irrelevant,
+.Pa mosps
+does not display the following fields:
+.Pa %CPU , %MEM , ADDR , C , F , PRI , RSS , S , STAT , STIME , SZ ,
+.Pa TIME , VSZ , WCHAN .
+.Pp
+Instead,
+.Pa mosps
+can display the following:
+.sp
+.Bl -tag -compact -width abcdefg
+.It Pa WHERE
+Where is the process running, including the special values:
+.Bl -tag -compact -width abcdefghij
+.It Pa 'here'
+the process runs on this node.
+.It Pa 'leaving'
+the process is leaving this node.
+.It Pa 'starting'
+the process just started, so it is still unclear where it will run.
+It also may be waiting for a node with sufficient available memory.
+.El
+.It Pa FROM
+The process' home-node, including the special value
+.Pa 'here' .
+.It Pa ORIGPID
+the original process ID in the process' home-node.
+"N/A" when the home-node is here.
+.It Pa FRZ
+Freezing status:
+.Bl -tag -compact -width abc
+.It -
+not frozen
+.It A
+automatically frozen
+.It P
+preempted (by an external program)
+.It M
+manually frozen
+.It N/A
+cannot be frozen (including guest processes)
+.El
+.It Pa NMIGS
+the number of times the process (or its MOSIX ancesstors before it was forked)
+had migrated so far ("N/A" for guest processes).
+.El
+.Pp
+Normally, if the nodes in the
+.Pa WHERE
+and
+.Pa FROM
+fields are listed in
+.Pa /etc/mosix/userview.map ,
+then they are displayed as node-numbers: otherwise as IP addresses.
+The
+.Pa -I
+argument forces all nodes to be displayed as IP addresses and the
+.Pa -h
+argument forces all nodes to be displayed as host-names (when the host-name
+can be found, otherwise as an IP address).  Similarly, the
+.Pa -M
+argument displays just the first component of the host-names.
+Regardless of those arguments, the local node is always displayed as "here".
+.Pp
+When the
+.Pa -L
+argument is specified, only local processes (those whose home-node is here)
+are listed.
+.Pp
+When the
+.Pa -O
+argument is specified, only local processes that are currently running
+away from home are listed.
+.Pp
+The
+.Pa -n
+argument displays the number of migrations
+.Pa ( NMIGS ) .
+.Pp
+The
+.Pa ORIGPID
+field is displayed only when the
+.Pa -P
+and/or
+.Pa -V
+arguments are specified.
+.Pp
+When the
+.Pa -V
+argument is specified, only guest processes (those whose home-node is not here)
+are listed: the listing includes
+.Pa ORIGPID ,
+but not
+.Pa WHERE
+and
+.Pa FRZ
+(as those only apply to local processes).
+.Pp
+The
+.Pa -S
+argument displays the progress of multiple-commands
+.Pa ( mosrun -S ) .
+Instead of ordinary MOSIX processes.  Only the main processes
+(that read commands-files) are displayed.  The information provided is:
+.sp
+.Bl -tag -compact -width abcde
+.It Pa TOTAL
+total number of command-lines given.
+.It Pa DONE
+number of completed command-lines (including failed commands).
+.It Pa FAIL
+number of command-lines that failed.
+.El
+.Sh IMPORTANT NOTES
+.Bl -enum -width a
+.It
+In conformance to the
+.Pa ps
+standards, since guest processes do not have a controlling terminal on this
+node, in order to list such processes either use the
+.Pa -V
+option, or include a suitable
+.Pa ps
+argument such as
+.Pa -A , ax
+or
+.Pa -ax 
+(it may depend on the version of
+.Pa ps
+installed on your computer).
+.It
+the
+.Pa c
+option of
+.Pa ps(1)
+is useful to view the first 15 characters of the command
+being run under
+.Pa mosrun
+instead of seeing only
+.Pa \&"mosrun\&"
+in the command field.
+.El
+.Sh SEE ALSO
+.Xr ps 1 ,
+.Xr mosrun 1 ,
+.Xr moskillall 1 ,
+.Xr mosix 7 .

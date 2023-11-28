@@ -1,0 +1,356 @@
+#!/bin/sh -
+#
+# Copyright (c) 2001 - 2015, Amnon BARAK, all rights reserved.
+# All rights reserved.
+# MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+#
+# THIS SOFTWARE IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+# WHATSOEVER. NO LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING
+# FROM THE USE OF THIS SOFTWARE WILL BE ACCEPTED.
+
+PATH=/sbin:/usr/sbin:/usr/local/sbin:/bin:/usr/bin:/usr/local/bin
+trap 'rm -f /tmp/.tgd$$ /tmp/.err$$' EXIT
+
+valid_ip() {
+	case $1 in *.*.*.*.* | 0.0.* | 255.255.255.*) return 1 ;;
+		[0-9]*.[0-9]*.[0-9]*.[0-9]*) : ;;
+		*) return 1 ;;
+	esac
+	set - `echo "$1" | sed "s/\./ /g"`
+	for chk in $1 $2 $3 $4
+	do
+		case "$chk" in [0-9] | [1-9][0-9] | 1[0-9][0-9] | 2[0-4][0-9] | 25[0-5]) : ;; *) return 1 ;;
+		esac
+	done
+	return 0
+}
+
+read_partner() {
+	read title
+	read priority cango cantake
+	case "$cango" in [01]) : ;; *) cango=1 ;; esac
+	case "$cantake" in [01]) : ;; *) cantake=1 ;; esac
+	n=0
+	while read first num obsolete_core part prox
+	do
+		case "$first" in "" | *"#"*) continue ;; esac
+		case "$num" in [1-9] | [1-9][0-9] | [1-9][0-9][0-9] | \
+			[1-9][0-9][0-9][0-9] | [1-2][0-9][0-9][0-9][0-9] | \
+			3[0-1][0-9][0-9][0-9] | 32[0-6][0-9][0-9] | \
+			327[0-5][0-9] |3276[0-7]) : ;; *) continue ;; esac
+		case $part in 1) : ;; *) continue ;; esac
+		case $prox in [01]) : ;; *) continue ;; esac
+		n=`expr $n + 1`
+		eval first$n=$first
+		eval num$n=$num
+		eval prox$n=$prox
+	done
+	return 0
+}
+
+while :
+do
+partners=`ls $ROOT/etc/mosix/partners 2>/dev/null`
+echo
+case "$partners" in "")
+	echo There are no partners in your multi-cluster private cloud yet:
+	echo ==============================================================
+	;;
+*)
+	echo partner-clusters in your multi-cluster private cloud:
+	echo =====================================================
+	i=1
+	for partner in $partners
+	do
+		echo -n "$partner - "
+		head -1 $ROOT/etc/mosix/partners/"$partner"
+		i=`expr $i + 1`
+		case "$i" in 15)
+			echo -n "Press <Enter> to continue."
+			read something
+			i=0
+		esac
+	done
+	;;
+esac
+echo
+case "$partners" in "")
+	   echo Please Type the name of a new partner to configure
+	   echo -n "(or press <Enter> to exit) :- " ;;
+	*) echo 'To delete a partner, type "-{partner}".'
+	   echo "To exit, just press <Enter>."
+	   echo -n "Which partner (existing or new) to configure? " ;;
+esac
+read partner other
+case "$other" in ?*)
+	[ -f "$ROOT/etc/mosix/partners/$partner" ] || {
+		echo One partner at a time please... ; continue
+	} ;; esac
+case "$partner" in "") exit 0 ;;
+	.*|-.*) continue ;;
+	-*) del=`expr "$partner" : '-\(.*\)'`
+	    [ -f $ROOT/etc/mosix/partners/"$del" ] || {
+		echo No such partner!
+		continue
+	    }
+	    echo
+	    echo -n "Are you sure you want to delete partner-cluster '$del'? "
+	    read yesno
+	    case "$yesno" in [yY]*) rm -f $ROOT/etc/mosix/partners/"$del" ;; esac
+	    continue ;;
+esac
+if [ -f $ROOT/etc/mosix/partners/"$partner" ]
+then
+	read_partner < $ROOT/etc/mosix/partners/"$partner"
+else
+	title="new partner"
+	priority=50
+	cango=1
+	cantake=1
+	n=0
+fi
+while :
+do
+	tt="Partner '$partner' titled \"$title\":"
+	echo
+	echo $tt
+	echo $tt | sed "s/./=/g"
+	echo Priority: $priority
+	echo -n "Migration: "
+	case $cango$cantake in 11) echo both ways ;;
+		01) echo accept guest processes, but do not run there ;;
+		10) echo can run there, but do not accept guest processes ;;
+		00) echo prohibited ;;
+	esac
+	case $n in 0) :
+		echo ---------------------------
+		echo No nodes are configured yet
+		echo ---------------------------
+		;;
+	*)
+		echo -----------------
+		echo Configured nodes:
+		echo -----------------
+		i=1
+		while [ $i -le $n ]
+		do
+			eval first=\$first$i
+			eval num=\$num$i
+			eval prox=\$prox$i
+			echo -n "$i. "
+			case $num in 1) echo -n $first ;;
+				*) echo -n "$num nodes starting from $first" ;;
+			esac
+			case $prox in 0) echo " (distant)" ;;
+				*) echo " (nearby)";;
+			esac
+			[ `expr $i % 7` = 0 ] && {
+				echo -n "Press <Enter> to continue."
+				read something
+			}
+			i=`expr $i + 1`
+		done ;;
+	esac
+	echo
+	echo "To define a new set of nodes, type 'n'."
+	echo "To modify the title, type 't'."
+	echo "To modify the priority, type 'p'."
+	echo "To modify the migration policy, type 'm'."
+	case $n in 0) : ;; *)
+		echo To modify a range of nodes, type its index from the list above.
+		echo "To delete a range of nodes, type 'd' followed by their index (eg. d"$n\).
+	esac
+	echo "For help, type 'h'.  When finished, type 'q' (to abandon all changes type 'Q')."
+	echo
+	echo -n "Option :- "
+	read opt
+	case "$opt" in
+		t) echo "Old title was '$title'."
+		   echo -n "New title :- "
+		   read title
+		   case "$title" in "") title="(no title)" ;; esac
+		   continue ;;
+		p) echo -n "New Priority (was $priority) :- "
+		   read pri
+		   case "$pri" in "") : ;;
+			[0-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|\
+			[1-5][0-9][0-9][0-9][0-9]|6[0-4][0-9][0-9][0-9]|\
+			65[0-4][0-9][0-9]|655[0-2][0-9]|6553[0-5])
+				priority=$pri ;;
+			*) echo "Incorrect priority: can is 0-65535." ;;
+		  esac
+		  continue ;;
+		m) case $cango in 0) def="[y/N]" ;; *) def="[Y/n]" ;; esac
+		   echo -n "Allow local processes to migrate to '$partner' $def? "
+		   read yesno
+		   case "$yesno" in [yY]*) cango=1 ;; [nN]*) cango=0 ;; esac
+		   case $cantake in 0) def="[y/N]" ;; *) def="[Y/n]" ;; esac
+		   echo -n "Allow guest processes from '$partner' $def? "
+		   read yesno
+		   case "$yesno" in [yY]*) cantake=1 ;; [nN]*) cantake=0 ;; esac
+		   continue ;;
+		n) [ $n -ge 256 ] && {
+			echo Too many entries.
+			continue
+		   }
+		echo
+		echo "Adding new node(s) to '$partner':"
+		echo
+		echo -n "First host-name or IP address :- "
+		read first
+		case "$first" in "") continue ;;
+			*[\ \	\#\\]*) echo Invalid host-name. ; continue ;;
+			[a-zA-Z]*) : ;;
+			[0-9]*) valid_ip $first || {
+				echo Invalid IP address.
+				continue
+			} ;;
+			*) echo Invalid host-name.
+			   continue ;;
+		esac
+		echo -n "Number of nodes :- "
+		read num
+		case "$num" in "") continue ;;
+			[1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|\
+				[1-9][0-9][0-9][0-9][0-9])
+				[ $num -gt 32767 ] && {
+					echo Too many nodes.
+					continue
+				} ;;
+			*) echo Invalid number of nodes.
+			   continue ;;
+		esac
+		case $n in 0) prox=0 ;; *) eval prox=\$prox$n ;; esac
+		case $num in 1) echo -n Is this node ;;
+			*) echo -n Are these nodes ;;
+		esac
+		case $prox in 0) echo -n " distant [Y/n]? " ;;
+			      1) echo -n " distant [y/N]? " ;;
+		esac
+		read yesno
+		case "$yesno" in [yY]*) prox=0 ;; [nN]*) prox=1 ;; esac
+
+		n=`expr $n + 1`
+		eval first$n=$first
+		eval num$n=$num
+		eval prox$n=$prox
+		continue ;;
+		d[1-9]|d[1-9][0-9]|d[1-9][0-9][0-9])
+		del=`expr $opt : "d\(.*\)"`
+		[ $del -gt $n ] && continue
+		while [ $del -lt $n ]
+		do
+			up=`expr $del + 1`
+			eval first$del=\$first$up
+			eval num$del=\$num$up
+			eval prox$del=\$prox$up
+			del=$up
+		done
+		n=`expr $n - 1`
+		continue ;;
+		[1-9]|[1-9][0-9]|[1-9][0-9][0-9)
+		[ $opt -gt $n ] && continue
+		echo
+		echo "Modifying range of nodes #$opt:"
+		echo
+		eval prev=\$first$opt
+		echo -n "First host-name or IP address ($prev) :- "
+		read first
+		case "$first" in "") first=$prev ;;
+			*[\ \	\#\\]*) echo Invalid host-name. ; continue ;;
+			[a-zA-Z]*) : ;;
+			[0-9]*) valid_ip $first || {
+				echo Invalid IP address.
+				continue
+			}
+			;;
+			*) echo Invalid host-name.
+			   continue ;;
+		esac
+		eval prev=\$num$opt
+		echo -n "Number of nodes ($prev) :- "
+		read num
+		case "$num" in "") num=$prev ;;
+			[1-9]|[1-9][0-9]|[1-9][0-9][0-9]|[1-9][0-9][0-9][0-9]|\
+				[1-9][0-9][0-9][0-9][0-9])
+				[ $num -gt 32767 ] && {
+					echo Too many nodes.
+					continue
+				}
+				[ $num -lt $prev ] && major_change=y
+				changed=y ;;
+			*) echo Invalid number of nodes.
+			   continue ;;
+		esac
+		eval prox=\$prox$opt
+		case $prox in 1) yn=Y/n ;; *) yn=y/N ;; esac
+		case $num in 1) echo -n "Is this node nearby [$yn]? " ;;
+			*) echo -n "Are these nodes nearby [$yn]? " ;;
+		esac
+		read yesno
+		case "$yesno" in [yY]*) prox=1 ;; [nN]*) prox=0 ;; esac
+
+		eval first$opt=$first
+		eval num$opt=$num
+		eval prox$opt=$prox
+		continue
+		;;
+		[hH]*) echo
+		echo We are now configuring our relationship with another cluster
+		echo "within our multi-cluster private cloud, called '$partner'."
+
+		echo
+		echo "You should configure range(s) of nodes with consecutive IP addresses"
+		echo "that belong to '$partner'."
+		echo
+		echo "For each range of nodes, you should specify whether those nodes are 'nearby'"
+		echo "or 'distant': Nodes are usually 'nearby' if they are in the same building"
+		echo "as your cluster and connected via a fast network (at least 1GB/sec)."
+		
+		echo -n "Press <Enter> to continue..."
+		read anything
+		;;
+		q*) [ $n = 0 ] && {
+				echo "Your need to configure at least one node!"
+				echo -n "Press <Enter> to continue..."
+				read someting
+				continue
+			}
+			echo "$title" > /tmp/.tgd$$ || {
+				echo Sorry, failed to create temporary file.
+				exit 1
+			}
+			echo $priority $cango $cantake >> /tmp/.tgd$$
+			i=1
+			while [ $i -le $n ]
+			do
+				eval echo \$first$i \$num$i 1 1 \$prox$i ">>/tmp/.tgd$$"
+				i=`expr $i + 1`
+			done
+			cmp -s /tmp/.tgd$$ $ROOT/etc/mosix/partners/"$partner" \
+				&& {
+					echo
+					echo No changes were made!
+					break
+				   }
+			case $ROOT in "") flag=P ;; *) flag=p ;; esac
+			mos_checkconf -$flag /tmp/.tgd$$ 2>/tmp/.err$$ || {
+				echo A problem was detected:
+				sed -e "s/.tgd$$: //" -e "s/^/*** /" -e "s/$/ ***/" < /tmp/.err$$
+				echo
+				echo -n "Press <Enter> to continue and correct it..."
+				read something
+				continue
+			}
+			echo
+			if cat /tmp/.tgd$$ > $ROOT/etc/mosix/partners/"$partner"
+			then
+				echo "Configuration saved for partner '$partner'".
+			else
+				echo Sorry, failed writing your changes to $ROOT/etc/mosix/partners/"partner"
+			fi
+			break ;;
+		Q*) break ;;
+	esac
+done
+done

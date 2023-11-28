@@ -1,0 +1,64 @@
+#!/bin/sh -
+#
+# Copyright (c) 2015, Amnon BARAK, all rights reserved.
+# All rights reserved.
+# MOSIX(TM) is a registered trademark of Amnon Barak and Amnon Shiloh.
+#
+# THIS SOFTWARE IS PROVIDED IN ITS "AS IS" CONDITION, WITH NO WARRANTY
+# WHATSOEVER. NO LIABILITY OF ANY KIND FOR ANY DAMAGES WHATSOEVER RESULTING
+# FROM THE USE OF THIS SOFTWARE WILL BE ACCEPTED.
+
+PATH=/sbin:/usr/sbin:/usr/local/sbin:/bin:/usr/bin:/usr/local/bin
+
+isint() {
+	case $1 in ""|*[!0-9]*) return 1 ;; *) return 0 ;; esac
+}
+
+read_conf() {
+	speed=
+	user=root
+	[ -f $ROOT/etc/mosix/speed ] && read s more < $ROOT/etc/mosix/speed && \
+		isint "$s" && [ "$s" -gt 0 ] && speed=$s
+}
+
+while :
+do
+	read_conf
+	echo
+	echo Processor Speed:
+	echo ================
+	case $speed in "")
+		echo "As the processor's speed was not set, the default of 10000 units applies." ;;
+		*) echo Processor speed was set at $speed units. ;;
+	esac
+	echo
+	echo The speed of the most typical processor in your cluster should be 
+	echo "set to 10000 units.  If you have computers with slower processors in"
+	echo "your cluster(s), then their speed should be set proportionally lower"
+	echo "and if you have computers with faster processors, in your cluster(s),"
+	echo then their speed should be set proportionally higher.
+	echo
+	echo As some processors do better with certain types of applications,
+	echo "in setting the processor's speed, you should take into account the"
+	echo "typical applications that your users intend to run on your MOSIX cluster(s)."
+	echo
+	echo "Please type an integer speed; '-' for the default; or 'q' to exit"
+	echo -n "Processor speed :- "
+	read opt
+	case "$opt" in
+		[0-9]*)
+			case "$opt" in "") : ;;
+				-) rm -f $ROOT/etc/mosix/speed ;;
+				*) if isint "$opt" && [ $opt -gt 0 ]
+				   then
+					echo $opt > $ROOT/etc/mosix/speed
+				   else
+					echo Improper value.
+				   fi
+			esac ;;
+		-) rm -f $ROOT/etc/mosix/speed ;;
+		[qQ]*) exit 0 ;;
+		"") ;;
+		*) echo Invalid option. ;;
+	esac
+done
